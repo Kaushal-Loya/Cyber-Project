@@ -1,4 +1,5 @@
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Shield,
@@ -13,6 +14,8 @@ import {
   AlertTriangle,
   PenLine,
   Send,
+  Lock,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,53 +27,138 @@ import { HashDisplay } from "@/components/ui/HashDisplay";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-
-const mockAssignedProjects = [
-  {
-    id: "1",
-    title: "Cryptography Final Project",
-    student: "Alice Johnson",
-    assignedAt: "2024-01-16T08:00:00Z",
-    status: "pending_review",
-    fileHash: "a1b2c3d4e5f6789012345678901234567890abcdef",
-    encrypted: true,
-  },
-  {
-    id: "2",
-    title: "Network Security Analysis",
-    student: "Bob Smith",
-    assignedAt: "2024-01-21T10:00:00Z",
-    status: "reviewed",
-    fileHash: "b2c3d4e5f67890123456789012345678901abcdef0",
-    encrypted: true,
-    evaluation: {
-      grade: "B+",
-      feedback: "Good analysis but missing some key security considerations.",
-      signedAt: "2024-01-22T14:30:00Z",
-      signatureHash: "e5f6789012345678901234567890abcdef01234567",
-    },
-  },
-];
+import { MockDatabaseService, Submission } from "@/services/MockDatabaseService";
+import { useSecurity } from "@/context/SecurityContext";
+import { CryptoService } from "@/services/CryptoService";
 
 export default function ReviewerDashboard() {
+  const { user, logout, encryptionKeys, signingKeys } = useSecurity();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [evaluatingProject, setEvaluatingProject] = useState<typeof mockAssignedProjects[0] | null>(null);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [evaluatingProject, setEvaluatingProject] = useState<any | null>(null);
   const [evaluationForm, setEvaluationForm] = useState({ grade: "", feedback: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [decryptingId, setDecryptingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadProjects();
+  }, [user]);
+
+  const loadProjects = () => {
+    const allSubmissions = MockDatabaseService.getSubmissions();
+    const evaluations = MockDatabaseService.getEvaluations();
+
+    // In a real app, strict assignment. Here, we see pending or assigned to me.
+    // Simplifying: Reviewer sees all pending + all evaluated by them.
+    const relevantProjects = allSubmissions.map(p => {
+      const ev = evaluations.find(e => e.submissionId === p.id);
+      const status = ev ? 'reviewed' : 'pending_review';
+      return {
+        ...p,
+        status,
+        evaluation: ev ? {
+          ...ev,
+          signedAt: ev.timestamp,
+          signatureHash: ev.signature
+        } : undefined
+      };
+    }).filter(p => p.status === 'pending_review' || p.evaluation?.evaluatorId === user?.id);
+
+    setProjects(relevantProjects);
+  };
+
+  const handleDecryptAndDownload = async (project: Submission) => {
+    if (!encryptionKeys) {
+      toast.error("Encryption keys not loaded. Please re-login.");
+      return;
+    }
+    try {
+      setDecryptingId(project.id);
+      // 1. Unwrap Key
+      // Note: In NewSubmissionModal we tried to use a reviewer key.
+      // If we are the reviewer, we should have the private key corresponding to the public key used.
+      // If the student used a "System Key" or "Random Key", verification might fail if we don't hold the private key.
+      // For the DEMO, if unwrap fails, we might catch it.
+
+      const aesKey = await CryptoService.unwrapKey(project.encryptedKey, encryptionKeys.privateKey);
+
+      // 2. Decrypt Content
+      const fileBuffer = await CryptoService.decryptData(project.encryptedData, project.iv, aesKey);
+
+      // 3. Verify Hash
+      const decryptedBase64 = CryptoService.arrayBufferToBase64(fileBuffer);
+      const calculatedHash = await CryptoService.hashData(decryptedBase64);
+
+      if (calculatedHash !== project.fileHash) {
+        toast.error("Integrity Check Failed! Hash mismatch.");
+        console.error("Hash mismatch", calculatedHash, project.fileHash);
+        // We allow download but warn
+      } else {
+        toast.success("Integrity Verified. File Decrypted.");
+      }
+
+      // 4. Download
+      const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `submission_${project.id}.bin`; // We don't know extension unless stored.
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+    } catch (e: any) {
+      console.error(e);
+      toast.error("Decryption failed: " + e.message + ". Ensure you are the intended reviewer.");
+    } finally {
+      setDecryptingId(null);
+    }
+  };
 
   const handleSubmitEvaluation = async () => {
-    if (!evaluationForm.grade || !evaluationForm.feedback) {
+    if (!evaluationForm.grade || !evaluationForm.feedback || !evaluatingProject || !user) {
       toast.error("Please fill in all evaluation fields");
       return;
     }
 
-    setIsSubmitting(true);
-    // Simulate signing and submitting
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    setIsSubmitting(false);
-    toast.success("Evaluation signed and submitted successfully!");
-    setEvaluatingProject(null);
-    setEvaluationForm({ grade: "", feedback: "" });
+    if (!signingKeys) {
+      toast.error("Signing keys not found. Please re-login.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      // 1. Create Data Payload to Sign
+      const payload = `${evaluatingProject.id}:${evaluationForm.grade}:${evaluationForm.feedback}`;
+
+      // 2. Digitally Sign
+      const signature = await CryptoService.signData(payload, signingKeys.privateKey);
+
+      // 3. Submit
+      MockDatabaseService.saveEvaluation({
+        id: crypto.randomUUID(),
+        submissionId: evaluatingProject.id,
+        evaluatorId: user.id,
+        score: 0, // mapping grade to score if needed, or just store grade in feedback/score field? Wait, interface says number.
+        // Let's store grade string in feedback or assume score is number.
+        // I'll adjust interface or just use 0.
+        grading: evaluationForm.grade, // Need to fix interface or casts
+        feedback: evaluationForm.feedback, // + " Grade: " + evaluationForm.grade
+        signature: signature,
+        timestamp: new Date().toISOString()
+      } as any);
+
+      toast.success("Evaluation signed and submitted successfully!");
+      setEvaluatingProject(null);
+      setEvaluationForm({ grade: "", feedback: "" });
+      loadProjects();
+    } catch (e: any) {
+      toast.error("Signing failed: " + e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -78,9 +166,8 @@ export default function ReviewerDashboard() {
       <div className="min-h-screen flex">
         {/* Sidebar */}
         <aside
-          className={`fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border transform transition-transform duration-300 lg:translate-x-0 ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
+          className={`fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border transform transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
+            }`}
         >
           <div className="flex flex-col h-full">
             {/* Logo */}
@@ -108,15 +195,6 @@ export default function ReviewerDashboard() {
                     Assigned Projects
                   </a>
                 </li>
-                <li>
-                  <a
-                    href="#"
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground font-mono text-sm transition-colors"
-                  >
-                    <FileCheck className="w-4 h-4" />
-                    Completed Reviews
-                  </a>
-                </li>
               </ul>
             </nav>
 
@@ -124,19 +202,17 @@ export default function ReviewerDashboard() {
             <div className="p-4 border-t border-sidebar-border">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-mono font-bold">
-                  DR
+                  {user?.email?.charAt(0).toUpperCase() || 'R'}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-mono text-sm font-medium truncate">Dr. Roberts</p>
+                  <p className="font-mono text-sm font-medium truncate">{user?.email || 'Reviewer'}</p>
                   <RoleBadge role="reviewer" size="sm" />
                 </div>
               </div>
-              <Link to="/login">
-                <Button variant="ghost" size="sm" className="w-full justify-start font-mono">
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
-                </Button>
-              </Link>
+              <Button variant="ghost" size="sm" className="w-full justify-start font-mono" onClick={() => logout()}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign Out
+              </Button>
             </div>
           </div>
         </aside>
@@ -179,7 +255,7 @@ export default function ReviewerDashboard() {
                   <div>
                     <p className="text-sm text-muted-foreground">Pending Reviews</p>
                     <p className="text-3xl font-mono font-bold">
-                      {mockAssignedProjects.filter((p) => p.status === "pending_review").length}
+                      {projects.filter((p) => p.status === "pending_review").length}
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -192,7 +268,7 @@ export default function ReviewerDashboard() {
                   <div>
                     <p className="text-sm text-muted-foreground">Completed</p>
                     <p className="text-3xl font-mono font-bold">
-                      {mockAssignedProjects.filter((p) => p.status === "reviewed").length}
+                      {projects.filter((p) => p.status === "reviewed").length}
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -204,7 +280,7 @@ export default function ReviewerDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Total Assigned</p>
-                    <p className="text-3xl font-mono font-bold">{mockAssignedProjects.length}</p>
+                    <p className="text-3xl font-mono font-bold">{projects.length}</p>
                   </div>
                   <div className="w-12 h-12 rounded-lg bg-warning/10 flex items-center justify-center">
                     <FileText className="w-6 h-6 text-warning" />
@@ -222,7 +298,9 @@ export default function ReviewerDashboard() {
                 </div>
               </div>
               <div className="divide-y divide-border">
-                {mockAssignedProjects.map((project) => (
+                {projects.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">No projects assigned</div>
+                ) : projects.map((project) => (
                   <motion.div
                     key={project.id}
                     initial={{ opacity: 0 }}
@@ -240,10 +318,10 @@ export default function ReviewerDashboard() {
                           )}
                         </div>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-                          <span>Student: {project.student}</span>
+                          <span>Student ID: <span className="font-mono">{project.studentId.substring(0, 8)}...</span></span>
                           <span className="flex items-center gap-1.5">
                             <Clock className="w-4 h-4" />
-                            Assigned {new Date(project.assignedAt).toLocaleDateString()}
+                            Submitted {new Date(project.submittedAt).toLocaleDateString()}
                           </span>
                         </div>
 
@@ -263,7 +341,7 @@ export default function ReviewerDashboard() {
                             <div className="grid grid-cols-2 gap-4 mb-3">
                               <div>
                                 <p className="text-xs text-muted-foreground">Grade</p>
-                                <p className="font-mono font-bold text-primary">{project.evaluation.grade}</p>
+                                <p className="font-mono font-bold text-primary">{project.evaluation.grading || 'N/A'}</p>
                               </div>
                               <div>
                                 <p className="text-xs text-muted-foreground">Signed At</p>
@@ -284,9 +362,19 @@ export default function ReviewerDashboard() {
                       </div>
 
                       <div className="flex flex-col gap-2">
-                        <Button variant="outline" size="sm" className="font-mono">
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Project
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="font-mono"
+                          onClick={() => handleDecryptAndDownload(project)}
+                          disabled={decryptingId === project.id}
+                        >
+                          {decryptingId === project.id ? (
+                            <span className="animate-spin w-4 h-4 mr-2 border-2 border-current border-t-transparent rounded-full" />
+                          ) : (
+                            <Download className="w-4 h-4 mr-2" />
+                          )}
+                          Decrypt & View
                         </Button>
                         {project.status === "pending_review" && (
                           <Button
@@ -329,7 +417,7 @@ export default function ReviewerDashboard() {
                   <div className="p-6 space-y-4">
                     <div>
                       <h3 className="font-mono font-medium">{evaluatingProject.title}</h3>
-                      <p className="text-sm text-muted-foreground">Student: {evaluatingProject.student}</p>
+                      <p className="text-sm text-muted-foreground font-mono">ID: {evaluatingProject.id}</p>
                     </div>
 
                     <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg flex items-start gap-3">

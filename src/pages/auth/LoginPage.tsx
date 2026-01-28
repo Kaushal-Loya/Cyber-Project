@@ -9,13 +9,17 @@ import { SecurityBadge } from "@/components/ui/SecurityBadge";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { useSecurity } from "@/context/SecurityContext";
+import { UserRole } from "@/services/AccessControlService";
+
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { mockLogin } = useSecurity();
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    username: "",
+    username: "", // treating as email for demo
     password: "",
     otp: "",
   });
@@ -41,11 +45,25 @@ export default function LoginPage() {
       return;
     }
     setIsLoading(true);
-    // Simulate OTP verification
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Authenticate via SecurityContext (Mock)
+    let role = UserRole.STUDENT;
+    const emailLower = formData.username.toLowerCase();
+    if (emailLower.includes("reviewer") || emailLower.includes("roberts") || emailLower.includes("williams")) {
+      role = UserRole.REVIEWER;
+    } else if (emailLower.includes("admin")) {
+      role = UserRole.ADMIN;
+    }
+
+    await mockLogin(formData.username, role);
+
     setIsLoading(false);
     toast.success("Authentication successful!");
-    navigate("/dashboard");
+
+    // Navigate based on role
+    if (role === UserRole.ADMIN) navigate("/dashboard/admin");
+    else if (role === UserRole.REVIEWER) navigate("/dashboard/reviewer");
+    else navigate("/dashboard/student");
   };
 
   return (

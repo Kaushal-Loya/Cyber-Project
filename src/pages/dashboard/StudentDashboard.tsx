@@ -1,4 +1,5 @@
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Shield,
@@ -22,40 +23,9 @@ import { GlowCard } from "@/components/layout/GlowCard";
 import { HashDisplay } from "@/components/ui/HashDisplay";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { Link } from "react-router-dom";
-
-// Mock data for demonstration
-const mockSubmissions = [
-  {
-    id: "1",
-    title: "Cryptography Final Project",
-    status: "evaluated",
-    submittedAt: "2024-01-15T10:30:00Z",
-    fileHash: "a1b2c3d4e5f6789012345678901234567890abcdef",
-    encrypted: true,
-    grade: "A",
-    feedback: "Excellent implementation of AES encryption.",
-  },
-  {
-    id: "2",
-    title: "Network Security Analysis",
-    status: "pending",
-    submittedAt: "2024-01-20T14:15:00Z",
-    fileHash: "b2c3d4e5f67890123456789012345678901abcdef0",
-    encrypted: true,
-    grade: null,
-    feedback: null,
-  },
-  {
-    id: "3",
-    title: "Authentication System Design",
-    status: "under_review",
-    submittedAt: "2024-01-22T09:45:00Z",
-    fileHash: "c3d4e5f6789012345678901234567890abcdef01b",
-    encrypted: true,
-    grade: null,
-    feedback: null,
-  },
-];
+import { NewSubmissionModal } from "@/components/dashboard/NewSubmissionModal";
+import { MockDatabaseService, Submission } from "@/services/MockDatabaseService";
+import { useSecurity } from "@/context/SecurityContext";
 
 const statusConfig = {
   pending: { label: "Pending Review", color: "text-muted-foreground", icon: Clock },
@@ -65,17 +35,50 @@ const statusConfig = {
 };
 
 export default function StudentDashboard() {
+  const { user, logout } = useSecurity();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [selectedSubmission, setSelectedSubmission] = useState<typeof mockSubmissions[0] | null>(null);
+  const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
+  const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+
+  useEffect(() => {
+    loadSubmissions();
+  }, [user]);
+
+  const loadSubmissions = () => {
+    if (user) {
+      const allSubmissions = MockDatabaseService.getSubmissions();
+      const evaluations = MockDatabaseService.getEvaluations();
+
+      const userSubmissions = allSubmissions
+        .filter(s => s.studentId === user.id)
+        .map(submission => {
+          const evaluation = evaluations.find(e => e.submissionId === submission.id);
+          return {
+            ...submission,
+            encrypted: true, // All are encrypted
+            grade: evaluation?.score,
+            feedback: evaluation?.feedback,
+            evaluationDate: evaluation?.timestamp
+          };
+        });
+
+      setSubmissions(userSubmissions);
+    }
+  };
+
+  const handleSubmissionSuccess = () => {
+    loadSubmissions();
+    setIsSubmissionModalOpen(false);
+  };
 
   return (
     <GridBackground>
       <div className="min-h-screen flex">
         {/* Sidebar */}
         <aside
-          className={`fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border transform transition-transform duration-300 lg:translate-x-0 ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
+          className={`fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border transform transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
+            }`}
         >
           <div className="flex flex-col h-full">
             {/* Logo */}
@@ -104,22 +107,13 @@ export default function StudentDashboard() {
                   </a>
                 </li>
                 <li>
-                  <a
-                    href="#"
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground font-mono text-sm transition-colors"
+                  <button
+                    onClick={() => setIsSubmissionModalOpen(true)}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground font-mono text-sm transition-colors"
                   >
                     <Upload className="w-4 h-4" />
                     New Submission
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="#"
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground font-mono text-sm transition-colors"
-                  >
-                    <FileCheck className="w-4 h-4" />
-                    Results
-                  </a>
+                  </button>
                 </li>
               </ul>
             </nav>
@@ -128,19 +122,17 @@ export default function StudentDashboard() {
             <div className="p-4 border-t border-sidebar-border">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-mono font-bold">
-                  JD
+                  {user?.email?.charAt(0).toUpperCase() || 'S'}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-mono text-sm font-medium truncate">John Doe</p>
+                  <p className="font-mono text-sm font-medium truncate">{user?.email || 'Student'}</p>
                   <RoleBadge role="student" size="sm" />
                 </div>
               </div>
-              <Link to="/login">
-                <Button variant="ghost" size="sm" className="w-full justify-start font-mono">
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
-                </Button>
-              </Link>
+              <Button variant="ghost" size="sm" className="w-full justify-start font-mono" onClick={() => logout()}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign Out
+              </Button>
             </div>
           </div>
         </aside>
@@ -172,7 +164,7 @@ export default function StudentDashboard() {
               </div>
               <div className="flex items-center gap-3">
                 <StatusIndicator status="secure" label="Session Secure" pulse />
-                <Button className="font-mono">
+                <Button className="font-mono" onClick={() => setIsSubmissionModalOpen(true)}>
                   <Upload className="w-4 h-4 mr-2" />
                   New Submission
                 </Button>
@@ -188,7 +180,7 @@ export default function StudentDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Total Submissions</p>
-                    <p className="text-3xl font-mono font-bold">{mockSubmissions.length}</p>
+                    <p className="text-3xl font-mono font-bold">{submissions.length}</p>
                   </div>
                   <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
                     <FileText className="w-6 h-6 text-primary" />
@@ -200,7 +192,7 @@ export default function StudentDashboard() {
                   <div>
                     <p className="text-sm text-muted-foreground">Under Review</p>
                     <p className="text-3xl font-mono font-bold">
-                      {mockSubmissions.filter((s) => s.status === "under_review").length}
+                      {submissions.filter((s) => s.status === "under_review").length}
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -213,7 +205,7 @@ export default function StudentDashboard() {
                   <div>
                     <p className="text-sm text-muted-foreground">Evaluated</p>
                     <p className="text-3xl font-mono font-bold">
-                      {mockSubmissions.filter((s) => s.status === "evaluated").length}
+                      {submissions.filter((s) => s.status === "evaluated").length}
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -229,62 +221,68 @@ export default function StudentDashboard() {
                 <h2 className="font-mono font-semibold">Submission History</h2>
                 <SecurityBadge variant="encrypted">Files Encrypted</SecurityBadge>
               </div>
-              <div className="divide-y divide-border">
-                {mockSubmissions.map((submission) => {
-                  const status = statusConfig[submission.status as keyof typeof statusConfig];
-                  const StatusIcon = status.icon;
-                  return (
-                    <motion.div
-                      key={submission.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="p-6 hover:bg-muted/30 transition-colors cursor-pointer"
-                      onClick={() => setSelectedSubmission(submission)}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-mono font-medium">{submission.title}</h3>
-                            <div className={`flex items-center gap-1.5 text-xs ${status.color}`}>
-                              <StatusIcon className="w-3.5 h-3.5" />
-                              {status.label}
+              {submissions.length === 0 ? (
+                <div className="p-12 text-center text-muted-foreground font-mono">
+                  No submissions yet. Click "New Submission" to start.
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {submissions.map((submission) => {
+                    const status = statusConfig[submission.status as keyof typeof statusConfig] || statusConfig.pending;
+                    const StatusIcon = status.icon;
+                    return (
+                      <motion.div
+                        key={submission.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="p-6 hover:bg-muted/30 transition-colors cursor-pointer"
+                        onClick={() => setSelectedSubmission(submission)}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h3 className="font-mono font-medium">{submission.title}</h3>
+                              <div className={`flex items-center gap-1.5 text-xs ${status.color}`}>
+                                <StatusIcon className="w-3.5 h-3.5" />
+                                {status.label}
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <span className="flex items-center gap-1.5">
-                              <Clock className="w-4 h-4" />
-                              {new Date(submission.submittedAt).toLocaleDateString()}
-                            </span>
-                            {submission.encrypted && (
-                              <SecurityBadge variant="encrypted" showIcon>
-                                AES-256
-                              </SecurityBadge>
-                            )}
-                          </div>
-                          <div className="mt-3">
-                            <HashDisplay
-                              hash={submission.fileHash}
-                              label="File Hash"
-                              algorithm="SHA-256"
-                              truncate
-                            />
-                          </div>
-                        </div>
-                        {submission.grade && (
-                          <div className="text-center">
-                            <div className="w-16 h-16 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-                              <span className="text-2xl font-mono font-bold text-primary">
-                                {submission.grade}
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <span className="flex items-center gap-1.5">
+                                <Clock className="w-4 h-4" />
+                                {new Date(submission.submittedAt).toLocaleDateString()}
                               </span>
+                              {submission.encrypted && (
+                                <SecurityBadge variant="encrypted" showIcon>
+                                  AES-256
+                                </SecurityBadge>
+                              )}
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">Grade</p>
+                            <div className="mt-3">
+                              <HashDisplay
+                                hash={submission.fileHash}
+                                label="File Hash"
+                                algorithm="SHA-256"
+                                truncate
+                              />
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
+                          {submission.grade && (
+                            <div className="text-center">
+                              <div className="w-16 h-16 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                                <span className="text-2xl font-mono font-bold text-primary">
+                                  {submission.grade}
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">Grade</p>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Selected Submission Details Modal */}
@@ -314,6 +312,11 @@ export default function StudentDashboard() {
                       <p className="text-sm text-muted-foreground">
                         Submitted on {new Date(selectedSubmission.submittedAt).toLocaleString()}
                       </p>
+                      {selectedSubmission.evaluationDate && (
+                        <p className="text-sm text-muted-foreground">
+                          Evaluated on {new Date(selectedSubmission.evaluationDate).toLocaleString()}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -340,6 +343,12 @@ export default function StudentDashboard() {
           </div>
         </main>
       </div>
+
+      <NewSubmissionModal
+        open={isSubmissionModalOpen}
+        onClose={() => setIsSubmissionModalOpen(false)}
+        onSuccess={handleSubmissionSuccess}
+      />
     </GridBackground>
   );
 }

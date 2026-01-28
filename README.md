@@ -1,73 +1,62 @@
-# Welcome to your Lovable project
 
-## Project info
+# Secure Project Submission and Evaluation System
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+A security-focused web application demonstrating authentication, authorization, encryption, hashing, and digital signatures. Designed for academic evaluation.
 
-## How can I edit this code?
+## Features
 
-There are several ways of editing your application.
+### 1. Authentication (NIST SP 800-63-2 Compliant Logic)
+- **Identity Proofing Implies**: Simulates credential verification and MFA.
+- **Secure Sessions**: Managed via Supabase Auth (or simulated Secure Context in Demo Mode).
+- **Role-Based Login**: Student, Reviewer, Admin roles.
 
-**Use Lovable**
+### 2. Authorization (RBAC)
+- **Student**: Submit projects, View own results.
+- **Reviewer**: View assigned projects, Decrypt submissions, Sign evaluations.
+- **Admin**: Verify digital signatures, Audit system logs, Manage users.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### 3. Cryptography Implementation (Web Crypto API)
+- **Encryption at Rest**:
+  - Files are encrypted client-side using **AES-256-GCM**.
+  - Reviewer's Public Key is used to wrap the AES Key using **RSA-OAEP**.
+- **Integrity**:
+  - SHA-256 Hashes of original files are stored and verified upon decryption.
+- **Digital Signatures**:
+  - Evaluation reports are signed by Reviewers using **RSA-PSS**.
+  - Admins verify signatures using the Reviewer's Public Key.
 
-Changes made via Lovable will be committed automatically to this repo.
+## How to Demo
 
-**Use your preferred IDE**
+### Step 1: Student Submission
+1. Login as valid student (e.g. `student@university.edu`) or use the Demo Login.
+2. Go to **New Submission**.
+3. Select a file.
+4. Watch the "Security Progress":
+   - Hashing (SHA-256)
+   - Generating Ephemeral AES Key
+   - Encrypting File
+   - Wrapping Key (RSA) with Reviewer's Public Key
+5. Submit.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Step 2: Reviewer Evaluation
+1. Login as reviewer (e.g. `reviewer@university.edu`).
+2. Go to **Assigned Projects**.
+3. Click **Decrypt & View**. The system will:
+   - Unwrap the AES Key using Reviewer's Private Key.
+   - Decrypt the file.
+   - Verify the SHA-256 integrity hash.
+4. Click **Evaluate**.
+5. Enter Grade/Final Feedback.
+6. **Sign & Submit**: The system signs the evaluation grade + feedback using the Reviewer's Private RSA Key.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Step 3: Admin Verification
+1. Login as admin (e.g. `admin@university.edu`).
+2. Go to **Pending Approvals**.
+3. Click **Verify & Publish**.
+4. The system calculates the hash of the report and verifies the Digital Signature against the Reviewer's Public Key.
+5. Check **Audit Logs** for the trace of actions.
 
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Tech Stack
+- **Frontend**: React, Vite, Tailwind CSS.
+- **Crypto**: Native Web Crypto API (`window.crypto.subtle`).
+- **Backend/Persistence**: Supabase (Auth) + Mock LocalStorage DB (for portable demonstration).

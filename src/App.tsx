@@ -11,28 +11,31 @@ import StudentDashboard from "./pages/dashboard/StudentDashboard";
 import ReviewerDashboard from "./pages/dashboard/ReviewerDashboard";
 import AdminDashboard from "./pages/dashboard/AdminDashboard";
 import NotFound from "./pages/NotFound";
+import { SecurityProvider } from "@/context/SecurityContext";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/dashboard" element={<DashboardSelector />} />
-          <Route path="/dashboard/student" element={<StudentDashboard />} />
-          <Route path="/dashboard/reviewer" element={<ReviewerDashboard />} />
-          <Route path="/dashboard/admin" element={<AdminDashboard />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <SecurityProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/dashboard" element={<DashboardSelector />} />
+            <Route path="/dashboard/student" element={<StudentDashboard />} />
+            <Route path="/dashboard/reviewer" element={<ReviewerDashboard />} />
+            <Route path="/dashboard/admin" element={<AdminDashboard />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </SecurityProvider>
   </QueryClientProvider>
 );
 
