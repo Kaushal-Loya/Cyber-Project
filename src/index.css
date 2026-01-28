@@ -1,0 +1,318 @@
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/700.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 
+  SecureEval Design System
+  A dark, cryptographic aesthetic for academic security applications
+  Colors: Slate foundations, Emerald/Cyan security indicators, Amber warnings
+*/
+
+@layer base {
+  :root {
+    /* Core backgrounds - Deep slate tones */
+    --background: 222 47% 6%;
+    --foreground: 210 40% 96%;
+
+    /* Card surfaces - Slightly elevated */
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 96%;
+
+    /* Popover surfaces */
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 96%;
+
+    /* Primary - Emerald for security/success states */
+    --primary: 160 84% 39%;
+    --primary-foreground: 222 47% 6%;
+
+    /* Secondary - Slate mid-tones */
+    --secondary: 215 28% 17%;
+    --secondary-foreground: 210 40% 90%;
+
+    /* Muted elements */
+    --muted: 215 28% 14%;
+    --muted-foreground: 215 20% 55%;
+
+    /* Accent - Cyan for highlights */
+    --accent: 186 100% 42%;
+    --accent-foreground: 222 47% 6%;
+
+    /* Destructive - Warm red */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* Warning - Amber */
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 6%;
+
+    /* Border and inputs */
+    --border: 215 28% 20%;
+    --input: 215 28% 17%;
+    --ring: 160 84% 39%;
+
+    --radius: 0.5rem;
+
+    /* Custom security colors */
+    --security-green: 160 84% 39%;
+    --security-cyan: 186 100% 42%;
+    --security-amber: 38 92% 50%;
+    --security-red: 0 72% 51%;
+    
+    /* Glow effects */
+    --glow-primary: 0 0 20px hsl(160 84% 39% / 0.3);
+    --glow-accent: 0 0 20px hsl(186 100% 42% / 0.3);
+    --glow-warning: 0 0 20px hsl(38 92% 50% / 0.3);
+
+    /* Sidebar */
+    --sidebar-background: 222 47% 7%;
+    --sidebar-foreground: 210 40% 90%;
+    --sidebar-primary: 160 84% 39%;
+    --sidebar-primary-foreground: 222 47% 6%;
+    --sidebar-accent: 215 28% 14%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 215 28% 18%;
+    --sidebar-ring: 160 84% 39%;
+  }
+
+  .dark {
+    /* Already dark theme - same values */
+    --background: 222 47% 6%;
+    --foreground: 210 40% 96%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 160 84% 39%;
+    --primary-foreground: 222 47% 6%;
+    --secondary: 215 28% 17%;
+    --secondary-foreground: 210 40% 90%;
+    --muted: 215 28% 14%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 186 100% 42%;
+    --accent-foreground: 222 47% 6%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 215 28% 20%;
+    --input: 215 28% 17%;
+    --ring: 160 84% 39%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* Monospace headings for cryptographic feel */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'JetBrains Mono', monospace;
+    @apply tracking-tight;
+  }
+
+  /* Code and security elements */
+  code, .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  /* Security badge styling */
+  .security-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .security-badge-encrypted {
+    @apply security-badge bg-primary/10 text-primary border border-primary/20;
+  }
+
+  .security-badge-verified {
+    @apply security-badge bg-accent/10 text-accent border border-accent/20;
+  }
+
+  .security-badge-warning {
+    @apply security-badge bg-warning/10 text-warning border border-warning/20;
+  }
+
+  .security-badge-error {
+    @apply security-badge bg-destructive/10 text-destructive border border-destructive/20;
+  }
+
+  /* Glowing elements */
+  .glow-primary {
+    box-shadow: var(--glow-primary);
+  }
+
+  .glow-accent {
+    box-shadow: var(--glow-accent);
+  }
+
+  /* Grid background pattern */
+  .bg-grid {
+    background-image: 
+      linear-gradient(to right, hsl(var(--border) / 0.3) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.3) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  /* Subtle scan line effect */
+  .scanlines {
+    position: relative;
+  }
+  
+  .scanlines::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      hsl(var(--foreground) / 0.02) 2px,
+      hsl(var(--foreground) / 0.02) 4px
+    );
+    pointer-events: none;
+  }
+
+  /* Terminal-style text cursor blink */
+  .cursor-blink::after {
+    content: '▊';
+    animation: blink 1s step-end infinite;
+    @apply text-primary ml-0.5;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  /* Security status indicator */
+  .status-indicator {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .status-indicator-secure {
+    @apply status-indicator bg-primary;
+    box-shadow: 0 0 8px hsl(var(--primary));
+  }
+
+  .status-indicator-warning {
+    @apply status-indicator bg-warning;
+    box-shadow: 0 0 8px hsl(var(--warning));
+  }
+
+  .status-indicator-error {
+    @apply status-indicator bg-destructive;
+    box-shadow: 0 0 8px hsl(var(--destructive));
+  }
+
+  /* Card with subtle glow on hover */
+  .card-interactive {
+    @apply transition-all duration-300;
+  }
+
+  .card-interactive:hover {
+    @apply border-primary/40;
+    box-shadow: 0 0 30px -10px hsl(var(--primary) / 0.2);
+  }
+
+  /* Hash/encryption display */
+  .hash-display {
+    @apply font-mono text-xs bg-muted/50 px-2 py-1 rounded break-all;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* Role badges */
+  .role-student {
+    @apply bg-blue-500/10 text-blue-400 border-blue-500/20;
+  }
+
+  .role-reviewer {
+    @apply bg-purple-500/10 text-purple-400 border-purple-500/20;
+  }
+
+  .role-admin {
+    @apply bg-amber-500/10 text-amber-400 border-amber-500/20;
+  }
+}
+
+@layer utilities {
+  /* Gradient text */
+  .text-gradient-primary {
+    @apply bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent;
+  }
+
+  /* Animated gradient border */
+  .border-gradient {
+    position: relative;
+    background: hsl(var(--card));
+  }
+
+  .border-gradient::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--primary)),
+      hsl(var(--accent)),
+      hsl(var(--primary))
+    );
+    border-radius: inherit;
+    z-index: -1;
+    opacity: 0.5;
+  }
+
+  /* Fade in animation */
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Stagger children animation */
+  .stagger-children > * {
+    animation: fadeIn 0.5s ease-out forwards;
+    opacity: 0;
+  }
+
+  .stagger-children > *:nth-child(1) { animation-delay: 0.1s; }
+  .stagger-children > *:nth-child(2) { animation-delay: 0.2s; }
+  .stagger-children > *:nth-child(3) { animation-delay: 0.3s; }
+  .stagger-children > *:nth-child(4) { animation-delay: 0.4s; }
+  .stagger-children > *:nth-child(5) { animation-delay: 0.5s; }
+  .stagger-children > *:nth-child(6) { animation-delay: 0.6s; }
+
+  /* Pulse glow animation */
+  .pulse-glow {
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% {
+      box-shadow: 0 0 5px hsl(var(--primary) / 0.5);
+    }
+    50% {
+      box-shadow: 0 0 20px hsl(var(--primary) / 0.8);
+    }
+  }
+}
