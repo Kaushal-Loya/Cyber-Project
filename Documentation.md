@@ -30,10 +30,28 @@ Access is governed by a strict RBAC model, ensuring the **Principle of Least Pri
 | **REVIEWER** | READ (Assigned) | CREATE, READ, SIGN | — |
 | **ADMIN** | READ, DELETE | READ, VERIFY | FULL CONTROL |
 
-### Key Security Policies
-1. **Ownership Enforcement**: Students can only access resources tagged with their specific `userId`.
-2. **Assignment Integrity**: Reviewers can only access project files explicitly assigned to them by an Admin.
-3. **Chinese Wall Principle**: Reviewers author evaluations but cannot publish or modify final grades; Admins publish grades but cannot author evaluations.
+### ⚖️ Policy Justifications ("The Who, What, and Why")
+
+#### 1. STUDENT Role
+- **Project Files (CREATE, READ)**: Students must upload their own work and review what they submitted. **Restriction**: They cannot UPDATE or DELETE after submission to ensure academic integrity and prevent tampering with evidence once the deadline passes.
+- **Evaluation Reports (NO ACCESS)**: Students are restricted from seeing internal reviewer notes to prevent bias and maintain the confidentiality of the academic assessment process.
+- **Final Results (READ)**: Students have a fundamental right to see their own verified grades but no authority to influence the data.
+
+#### 2. REVIEWER Role
+- **Project Files (READ)**: Required to perform the assessment. **Restriction**: They cannot CREATE or MODIFY student files to prevent any unauthorized changes to the original work.
+- **Evaluation Reports (CREATE, READ, SIGN)**: Reviewers are the authors of assessments. The **SIGN** action is critical for **Non-Repudiation**—it legally binds the reviewer to their assessment.
+- **Final Results (NO ACCESS)**: Implements **Separation of Duties**; the person giving the raw feedback shouldn't be the one officially publishing final institution-verified grades.
+
+#### 3. ADMIN Role
+- **Project Files (READ, DELETE)**: Admins require oversight to manage the system and delete inappropriate or malicious content with a full audit log.
+- **Evaluation Reports (READ, VERIFY)**: Admins audit the quality of reviews and use the **VERIFY** action to cryptographically confirm that a reviewer's signature is valid before moving to publication.
+- **Final Results (FULL CONTROL)**: As the highest authority (Office of Controller), they have full CRUD permissions to manage the definitive institutional record of results.
+
+### 🛡️ Implementation of Access Control
+Permissions are not just hidden in the UI; they are enforced **programmatically** on the backend:
+1. **Middleware Enforcement**: The `checkPermission` middleware in `server/middleware/accessControl.js` validates every API request against the user's JWT role.
+2. **Ownership Checks**: Database queries (e.g., `projects.find({ studentId: userId })`) ensure users can only interact with their own data regardless of role.
+3. **Immutability logic**: Code-level checks prevent even an Admin from "editing" a signed evaluation report once it has been verified.
 
 ---
 
