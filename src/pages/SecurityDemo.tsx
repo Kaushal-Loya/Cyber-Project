@@ -29,6 +29,8 @@ export default function SecurityDemo() {
     const [base64Input, setBase64Input] = useState("");
     const [base64Output, setBase64Output] = useState("");
 
+    const [base64Decoded, setBase64Decoded] = useState("");
+
     // ========== HASHING WITH SALT ==========
     const handleHashPassword = async () => {
         if (!password) {
@@ -140,6 +142,7 @@ export default function SecurityDemo() {
         }
         const encoded = window.btoa(base64Input);
         setBase64Output(encoded);
+        setBase64Decoded(""); // Clear decoded output when encoding new text
         toast.success("Text encoded to Base64!");
     };
 
@@ -150,7 +153,7 @@ export default function SecurityDemo() {
         }
         try {
             const decoded = window.atob(base64Output);
-            setBase64Input(decoded);
+            setBase64Decoded(decoded);
             toast.success("Base64 decoded!");
         } catch (error) {
             toast.error("Invalid Base64 string");
@@ -560,10 +563,19 @@ export default function SecurityDemo() {
                                     </div>
                                 )}
 
-                                <div className="border-t pt-4">
+                                <div className="border-t pt-4 space-y-4">
                                     <Button onClick={handleDecode} variant="outline">
                                         Decode from Base64
                                     </Button>
+
+                                    {base64Decoded && (
+                                        <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                                            <Label className="text-xs text-green-600">Decoded Plaintext</Label>
+                                            <p className="text-sm font-mono break-all mt-1">
+                                                {base64Decoded}
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded text-sm">
