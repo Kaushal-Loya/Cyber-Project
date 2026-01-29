@@ -1,8 +1,6 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { CryptoService } from "@/services/CryptoService";
 import ApiService from "@/services/ApiService";
-import { supabase } from "@/integrations/supabase/client";
 import { UserRole } from "@/services/AccessControlService";
 
 interface SecurityContextType {
@@ -29,26 +27,19 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const [isLoading, setIsLoading] = useState(true);
 
-    // Load user from Supabase session OR mock demo user/role on mount
+    // Load user from local session on mount
     useEffect(() => {
         const checkSession = async () => {
             try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session?.user) {
-                    setUser(session.user);
-                    const storedRole = localStorage.getItem(`role_${session.user.id}`) as UserRole;
-                    setRole(storedRole || UserRole.STUDENT);
-                    await loadKeys(session.user.id);
-                } else {
-                    // FALLBACK: Authenticate from "Demo" persistence if exists
-                    const demoUserStr = localStorage.getItem('demo_user');
-                    const demoRoleStr = localStorage.getItem('demo_role');
-                    if (demoUserStr && demoRoleStr) {
-                        const demoUser = JSON.parse(demoUserStr);
-                        setUser(demoUser);
-                        setRole(demoRoleStr as UserRole);
-                        await loadKeys(demoUser.id);
-                    }
+                // Authenticate from local persistence
+                const storedUser = localStorage.getItem('user') || localStorage.getItem('demo_user');
+                const storedRole = localStorage.getItem('role') || localStorage.getItem('demo_role');
+
+                if (storedUser && storedRole) {
+                    const parsedUser = JSON.parse(storedUser);
+                    setUser(parsedUser);
+                    setRole(storedRole as UserRole);
+                    await loadKeys(parsedUser.id || parsedUser._id);
                 }
             } catch (error) {
                 console.error("Session check failed", error);
@@ -57,24 +48,6 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
         };
         checkSession();
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            if (session?.user) {
-                // Clear any demo user if real auth happens
-                localStorage.removeItem('demo_user');
-                localStorage.removeItem('demo_role');
-
-                setUser(session.user);
-                const storedRole = localStorage.getItem(`role_${session.user.id}`) as UserRole;
-                setRole(storedRole || UserRole.STUDENT);
-                await loadKeys(session.user.id);
-            } else {
-                // Do not instantly clear user if we are in demo mode, but Supabase says "signed out".
-                // Only clear if we explicitly logout (handled in logout function)
-            }
-        });
-
-        return () => subscription.unsubscribe();
     }, []);
 
     const loadKeys = async (userId: string) => {
@@ -180,7 +153,6 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
 
     const logout = async () => {
-        await supabase.auth.signOut();
         if (user) localStorage.removeItem(`role_${user.id}`);
         // Clear demo persistence
         localStorage.removeItem('demo_user');
