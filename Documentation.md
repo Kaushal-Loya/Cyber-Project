@@ -34,19 +34,19 @@ The system protects three core classes of data objects:
 ### ⚖️ Policy Justifications ("The Who, What, and Why")
 
 #### 1. STUDENT Role
-- **Academic Artifacts (CREATE, READ)**: Students must upload their own work and review what they submitted. **Restriction**: They cannot UPDATE or DELETE after submission to ensure academic integrity and prevent tampering with evidence once the deadline passes.
+- **Academic Artifacts (CREATE, READ, DELETE)**: Students must upload their own work and review what they submitted. **Controlled Deletion**: Students are permitted to delete their own artifacts *only* if they have not yet been evaluated, allowing them to fix submission errors. Once the evaluation state is reached, deletion is locked to prevent academic tampering.
 - **Assessment Metrics (NO ACCESS)**: Students are restricted from seeing raw reviewer metrics or intermediate evaluation data to prevent bias and maintain the confidentiality of the academic assessment process.
 - **Institutional Records (READ)**: Students have a fundamental right to see their own verified grades but no authority to influence the data.
 
 #### 2. REVIEWER Role
-- **Academic Artifacts (READ)**: Required to perform the assessment. **Restriction**: They cannot CREATE or MODIFY student artifacts to prevent any unauthorized changes to the original work.
+- **Academic Artifacts (READ)**: Required to perform the assessment. **Restriction**: They cannot CREATE, MODIFY, or DELETE student artifacts to prevent any unauthorized changes to the original work.
 - **Assessment Metrics (CREATE, READ, SIGN)**: Reviewers are the primary authors of metrics. The **SIGN** action is critical for **Non-Repudiation**—it cryptographically binds the reviewer to their assessment.
 - **Institutional Records (NO ACCESS)**: Implements **Separation of Duties**; the person generating assessment metrics should not have the authority to publish institutional records.
 
 #### 3. ADMIN Role
-- **Academic Artifacts (READ, DELETE)**: Admins require oversight to manage the system and delete inappropriate or malicious content with a full audit log.
+- **Academic Artifacts (READ, DELETE)**: Admins require oversight to manage the system and delete inappropriate or malicious content or handle administrative appeals with a full audit log.
 - **Assessment Metrics (READ, VERIFY)**: Admins audit the quality of assessments and use the **VERIFY** action to cryptographically confirm that a reviewer's signature is valid before moving to publication.
-- **Institutional Records (FULL CONTROL)**: As the highest authority (Office of Controller), they have full CRUD permissions to manage the definitive institutional record of results.
+- **Institutional Records (FULL CONTROL)**: As the highest authority (Office of Controller), they have full CRUD permissions (including DELETE) to manage the definitive institutional record of results.
 
 ### 🛡️ Implementation of Access Control
 Permissions are not just hidden in the UI; they are enforced **programmatically**:

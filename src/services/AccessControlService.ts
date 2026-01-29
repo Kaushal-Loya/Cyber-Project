@@ -41,8 +41,8 @@ type AccessControlMatrix = {
  */
 export const RBAC_MATRIX: AccessControlMatrix = {
     [UserRole.STUDENT]: {
-        // Students can create and read their OWN academic artifacts only
-        [ResourceType.ACADEMIC_ARTIFACTS]: [Action.CREATE, Action.READ],
+        // Students can create, read, and delete their OWN academic artifacts (deletion is restricted once evaluated)
+        [ResourceType.ACADEMIC_ARTIFACTS]: [Action.CREATE, Action.READ, Action.DELETE],
         // Students can read their OWN institutional records only
         [ResourceType.INSTITUTIONAL_RECORDS]: [Action.READ],
         // Students have NO access to raw assessment metrics
@@ -69,7 +69,7 @@ export const RBAC_MATRIX: AccessControlMatrix = {
  */
 export const POLICY_DESCRIPTIONS = {
     [UserRole.STUDENT]: {
-        [ResourceType.ACADEMIC_ARTIFACTS]: 'Students can create and view their own academic artifacts. No modification or deletion allowed to maintain academic integrity.',
+        [ResourceType.ACADEMIC_ARTIFACTS]: 'Students can create, view, and delete their own academic artifacts. Deletion is restricted once the evaluation process has commenced to ensure non-interference.',
         [ResourceType.INSTITUTIONAL_RECORDS]: 'Students can view their own published institutional records and evaluation outcomes.',
         [ResourceType.ASSESSMENT_METRICS]: 'No access - students do not see raw assessment metrics.',
     },

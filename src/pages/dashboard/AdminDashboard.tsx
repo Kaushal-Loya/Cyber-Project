@@ -154,6 +154,23 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteProject = async (projectId: string) => {
+    if (!window.confirm("Are you sure you want to delete this project? This will also remove any associated evaluations. This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      const result = await ApiService.deleteProject(projectId);
+      if (result.success) {
+        toast.success("Project and associated records deleted.");
+        loadAllProjects();
+        loadEvaluations();
+      }
+    } catch (e: any) {
+      toast.error("Delete failed: " + e.message);
+    }
+  };
+
   return (
     <GridBackground>
       <div className="min-h-screen flex">
@@ -481,6 +498,7 @@ export default function AdminDashboard() {
                         <th className="px-6 py-3 text-left text-xs font-mono text-muted-foreground uppercase">Grade</th>
                         <th className="px-6 py-3 text-left text-xs font-mono text-muted-foreground uppercase">Verified</th>
                         <th className="px-6 py-3 text-right text-xs font-mono text-muted-foreground uppercase">Date</th>
+                        <th className="px-6 py-3 text-right text-xs font-mono text-muted-foreground uppercase">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -511,6 +529,16 @@ export default function AdminDashboard() {
                             </td>
                             <td className="px-6 py-4 text-right font-mono text-xs text-muted-foreground">
                               {new Date(p.submittedAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-muted-foreground hover:text-destructive transition-colors"
+                                onClick={() => handleDeleteProject(p.id)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
                             </td>
                           </tr>
                         ))}
