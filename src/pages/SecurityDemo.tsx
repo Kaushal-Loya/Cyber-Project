@@ -301,7 +301,12 @@ export default function SecurityDemo() {
                                                             UserRole.STUDENT,
                                                             ResourceType.ACADEMIC_ARTIFACTS,
                                                             Action.READ
-                                                        ) && <span className="text-green-500">READ</span>}
+                                                        ) && <span className="text-green-500">READ </span>}
+                                                        {AccessControlService.hasPermission(
+                                                            UserRole.STUDENT,
+                                                            ResourceType.ACADEMIC_ARTIFACTS,
+                                                            Action.DELETE
+                                                        ) && <span className="text-green-500">DELETE</span>}
                                                     </td>
                                                     <td className="p-2 text-xs text-muted-foreground">-</td>
                                                     <td className="p-2 text-xs">
