@@ -25,13 +25,14 @@ import { RoleBadge } from "@/components/ui/RoleBadge";
 import { GlowCard } from "@/components/layout/GlowCard";
 import { HashDisplay } from "@/components/ui/HashDisplay";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { MockDatabaseService, Submission } from "@/services/MockDatabaseService";
 import { useSecurity } from "@/context/SecurityContext";
 import { CryptoService } from "@/services/CryptoService";
 
 export default function ReviewerDashboard() {
+  const navigate = useNavigate();
   const { user, logout, encryptionKeys, signingKeys } = useSecurity();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
@@ -209,7 +210,7 @@ export default function ReviewerDashboard() {
                   <RoleBadge role="reviewer" size="sm" />
                 </div>
               </div>
-              <Button variant="ghost" size="sm" className="w-full justify-start font-mono" onClick={() => logout()}>
+              <Button variant="ghost" size="sm" className="w-full justify-start font-mono" onClick={() => { logout(); navigate('/'); }}>
                 <LogOut className="w-4 h-4 mr-2" />
                 Sign Out
               </Button>

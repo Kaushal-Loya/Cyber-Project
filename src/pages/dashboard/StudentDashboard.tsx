@@ -12,7 +12,6 @@ import {
   LogOut,
   Menu,
   X,
-  FileCheck,
   Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,9 +21,9 @@ import { RoleBadge } from "@/components/ui/RoleBadge";
 import { GlowCard } from "@/components/layout/GlowCard";
 import { HashDisplay } from "@/components/ui/HashDisplay";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { NewSubmissionModal } from "@/components/dashboard/NewSubmissionModal";
-import { MockDatabaseService, Submission } from "@/services/MockDatabaseService";
+import { MockDatabaseService } from "@/services/MockDatabaseService";
 import { useSecurity } from "@/context/SecurityContext";
 
 const statusConfig = {
@@ -36,6 +35,7 @@ const statusConfig = {
 
 export default function StudentDashboard() {
   const { user, logout } = useSecurity();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null);
@@ -129,7 +129,7 @@ export default function StudentDashboard() {
                   <RoleBadge role="student" size="sm" />
                 </div>
               </div>
-              <Button variant="ghost" size="sm" className="w-full justify-start font-mono" onClick={() => logout()}>
+              <Button variant="ghost" size="sm" className="w-full justify-start font-mono" onClick={() => { logout(); navigate('/'); }}>
                 <LogOut className="w-4 h-4 mr-2" />
                 Sign Out
               </Button>

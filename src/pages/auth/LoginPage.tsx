@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Shield, Lock, Eye, EyeOff, ArrowRight, KeyRound } from "lucide-react";
+import { Shield, Lock, Eye, EyeOff, ArrowRight, KeyRound, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,15 +11,27 @@ import { toast } from "sonner";
 
 import { useSecurity } from "@/context/SecurityContext";
 import { UserRole } from "@/services/AccessControlService";
+import ApiService from "@/services/ApiService";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { mockLogin } = useSecurity();
+  const { mockLogin, isAuthenticated, role } = useSecurity();
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>("");
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+
+  useEffect(() => {
+    if (isAuthenticated && role) {
+      if (role === UserRole.ADMIN) navigate("/dashboard/admin");
+      else if (role === UserRole.REVIEWER) navigate("/dashboard/reviewer");
+      else navigate("/dashboard/student");
+    }
+  }, [isAuthenticated, role, navigate]);
+
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    username: "", // treating as email for demo
+    username: "",
     password: "",
     otp: "",
   });
@@ -31,11 +43,46 @@ export default function LoginPage() {
       return;
     }
     setIsLoading(true);
-    // Simulate credential verification
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIsLoading(false);
-    setStep("otp");
-    toast.success("Credentials verified. Enter OTP to continue.");
+
+    try {
+      // STEP 1: Single-Factor Authentication (MongoDB + bcrypt)
+      const result = await ApiService.login(formData.username, formData.password);
+
+      if (!result.success) {
+        toast.error(result.error || "Authentication failed");
+        setIsLoading(false);
+        return;
+      }
+
+      // STEP 2: OTP sent via email (nodemailer)
+      setCurrentUserEmail(result.email);
+      setIsLoading(false);
+      setStep("otp");
+
+      // Show OTP for demo/testing (remove in production)
+      if (result.otp) {
+        toast.success(`Credentials verified! Check your email for OTP`, {
+          description: `Demo Mode - OTP: ${result.otp}`,
+          duration: 15000,
+        });
+      } else {
+        toast.success(`Credentials verified! OTP sent to ${result.email}`, {
+          description: result.previewUrl ? 'Check console for email preview link' : 'Check your email inbox',
+          duration: 10000,
+        });
+      }
+
+      // Log preview URL if available (for testing with Ethereal)
+      if (result.previewUrl) {
+        console.log('📧 Email Preview URL:', result.previewUrl);
+        setPreviewUrl(result.previewUrl);
+      }
+
+    } catch (error: any) {
+      console.error("Authentication error:", error);
+      toast.error(error.message || "Authentication failed. Please try again.");
+      setIsLoading(false);
+    }
   };
 
   const handleOTPSubmit = async (e: React.FormEvent) => {
@@ -46,24 +93,41 @@ export default function LoginPage() {
     }
     setIsLoading(true);
 
-    // Authenticate via SecurityContext (Mock)
-    let role = UserRole.STUDENT;
-    const emailLower = formData.username.toLowerCase();
-    if (emailLower.includes("reviewer") || emailLower.includes("roberts") || emailLower.includes("williams")) {
-      role = UserRole.REVIEWER;
-    } else if (emailLower.includes("admin")) {
-      role = UserRole.ADMIN;
+    try {
+      // STEP 3: Multi-Factor Authentication - Verify OTP from MongoDB
+      const result = await ApiService.verifyOTP(currentUserEmail, formData.otp);
+
+      if (!result.success) {
+        toast.error(result.error || "OTP verification failed");
+        setIsLoading(false);
+        return;
+      }
+
+      // Store JWT token
+      localStorage.setItem('auth_token', result.token);
+
+      // Map role to UserRole enum
+      let userRole = UserRole.STUDENT;
+      if (result.user.role === 'reviewer') userRole = UserRole.REVIEWER;
+      else if (result.user.role === 'admin') userRole = UserRole.ADMIN;
+
+      // Authenticate via SecurityContext
+      await mockLogin(result.user.email, userRole);
+
+      setIsLoading(false);
+      toast.success("MFA Successful! Welcome back.", {
+        description: `Logged in as ${result.user.username}`,
+      });
+
+      // Navigate based on role
+      if (userRole === UserRole.ADMIN) navigate("/dashboard/admin");
+      else if (userRole === UserRole.REVIEWER) navigate("/dashboard/reviewer");
+      else navigate("/dashboard/student");
+    } catch (error: any) {
+      console.error("OTP verification error:", error);
+      toast.error(error.message || "OTP verification failed. Please try again.");
+      setIsLoading(false);
     }
-
-    await mockLogin(formData.username, role);
-
-    setIsLoading(false);
-    toast.success("Authentication successful!");
-
-    // Navigate based on role
-    if (role === UserRole.ADMIN) navigate("/dashboard/admin");
-    else if (role === UserRole.REVIEWER) navigate("/dashboard/reviewer");
-    else navigate("/dashboard/student");
   };
 
   return (

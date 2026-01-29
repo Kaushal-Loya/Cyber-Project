@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { GridBackground } from "@/components/layout/GridBackground";
 import { SecurityBadge } from "@/components/ui/SecurityBadge";
 import { Link } from "react-router-dom";
+import { useSecurity } from "@/context/SecurityContext";
 
 const features = [
   {
@@ -54,6 +55,14 @@ const itemVariants = {
 };
 
 export default function LandingPage() {
+  const { isAuthenticated, logout } = useSecurity();
+
+  const handleLogout = () => {
+    // When user explicitly logs out from landing page, set a flag
+    sessionStorage.setItem('loggedOutFromLanding', 'true');
+    logout();
+  };
+
   return (
     <GridBackground showScanlines>
       <div className="min-h-screen">
@@ -70,16 +79,36 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <Link to="/login">
-                <Button variant="ghost" className="font-mono">
-                  Sign In
+              <Link to="/security-demo">
+                <Button variant="ghost" className="font-mono text-sm">
+                  🔬 Security Demo
                 </Button>
               </Link>
-              <Link to="/register">
-                <Button className="font-mono">
-                  Get Started
-                </Button>
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <Link to="/dashboard">
+                    <Button variant="ghost" className="font-mono">
+                      Dashboard
+                    </Button>
+                  </Link>
+                  <Button variant="outline" className="font-mono" onClick={handleLogout}>
+                    Logout
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Link to="/login">
+                    <Button variant="ghost" className="font-mono">
+                      Sign In
+                    </Button>
+                  </Link>
+                  <Link to="/register">
+                    <Button className="font-mono">
+                      Get Started
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </header>
@@ -96,14 +125,14 @@ export default function LandingPage() {
               <SecurityBadge variant="encrypted">End-to-End Encrypted</SecurityBadge>
               <SecurityBadge variant="verified">NIST Compliant</SecurityBadge>
             </div>
-            
+
             <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
               Secure Academic
               <span className="block text-gradient-primary">Project Evaluation</span>
             </h1>
-            
+
             <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              A cryptographically secure workflow system for submitting, reviewing, and evaluating 
+              A cryptographically secure workflow system for submitting, reviewing, and evaluating
               academic projects with complete audit trails and tamper-proof verification.
             </p>
 

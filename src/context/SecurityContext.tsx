@@ -10,6 +10,7 @@ interface SecurityContextType {
     encryptionKeys: CryptoKeyPair | null; // My keys
     signingKeys: CryptoKeyPair | null; // My keys
     isAuthenticated: boolean;
+    isLoading: boolean;
     login: (email: string, role: UserRole) => Promise<void>;
     mockLogin: (email: string, role: UserRole) => Promise<void>;
     logout: () => Promise<void>;
@@ -25,30 +26,50 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const [encryptionKeys, setEncryptionKeys] = useState<CryptoKeyPair | null>(null);
     const [signingKeys, setSigningKeys] = useState<CryptoKeyPair | null>(null);
 
-    // Load user from Supabase session on mount
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Load user from Supabase session OR mock demo user/role on mount
     useEffect(() => {
         const checkSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                setUser(session.user);
-                const storedRole = localStorage.getItem(`role_${session.user.id}`) as UserRole;
-                setRole(storedRole || UserRole.STUDENT);
-                await loadKeys(session.user.id);
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user) {
+                    setUser(session.user);
+                    const storedRole = localStorage.getItem(`role_${session.user.id}`) as UserRole;
+                    setRole(storedRole || UserRole.STUDENT);
+                    await loadKeys(session.user.id);
+                } else {
+                    // FALLBACK: Authenticate from "Demo" persistence if exists
+                    const demoUserStr = localStorage.getItem('demo_user');
+                    const demoRoleStr = localStorage.getItem('demo_role');
+                    if (demoUserStr && demoRoleStr) {
+                        const demoUser = JSON.parse(demoUserStr);
+                        setUser(demoUser);
+                        setRole(demoRoleStr as UserRole);
+                        await loadKeys(demoUser.id);
+                    }
+                }
+            } catch (error) {
+                console.error("Session check failed", error);
+            } finally {
+                setIsLoading(false);
             }
         };
         checkSession();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (session?.user) {
+                // Clear any demo user if real auth happens
+                localStorage.removeItem('demo_user');
+                localStorage.removeItem('demo_role');
+
                 setUser(session.user);
                 const storedRole = localStorage.getItem(`role_${session.user.id}`) as UserRole;
                 setRole(storedRole || UserRole.STUDENT);
                 await loadKeys(session.user.id);
             } else {
-                setUser(null);
-                setRole(null);
-                setEncryptionKeys(null);
-                setSigningKeys(null);
+                // Do not instantly clear user if we are in demo mode, but Supabase says "signed out".
+                // Only clear if we explicitly logout (handled in logout function)
             }
         });
 
@@ -119,11 +140,15 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             aud: 'authenticated',
             created_at: new Date().toISOString(),
         };
-        // Simulate slight delay
         await new Promise(r => setTimeout(r, 100));
         setUser(mockUser);
-        localStorage.setItem(`role_${mockUser.id}`, role);
         setRole(role);
+
+        // PERSIST Demo User
+        localStorage.setItem('demo_user', JSON.stringify(mockUser));
+        localStorage.setItem('demo_role', role);
+        localStorage.setItem(`role_${mockUser.id}`, role); // Keep existing pattern too
+
         await loadKeys(mockUser.id);
 
         // Update public directory with this email so others can find me
@@ -135,7 +160,11 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const logout = async () => {
         await supabase.auth.signOut();
-        localStorage.removeItem(`role_${user?.id}`);
+        if (user) localStorage.removeItem(`role_${user.id}`);
+        // Clear demo persistence
+        localStorage.removeItem('demo_user');
+        localStorage.removeItem('demo_role');
+
         setUser(null);
         setRole(null);
         setEncryptionKeys(null);
@@ -156,7 +185,7 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     return (
         <SecurityContext.Provider value={{
-            user, role, encryptionKeys, signingKeys, isAuthenticated: !!user, login, mockLogin, logout, generateAndStoreKeys, getPublicKey
+            user, role, encryptionKeys, signingKeys, isAuthenticated: !!user, isLoading, login, mockLogin, logout, generateAndStoreKeys, getPublicKey
         }}>
             {children}
         </SecurityContext.Provider>

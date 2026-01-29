@@ -8,6 +8,7 @@ import { GridBackground } from "@/components/layout/GridBackground";
 import { SecurityBadge } from "@/components/ui/SecurityBadge";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import ApiService from "@/services/ApiService";
 
 type Role = "student" | "reviewer";
 
@@ -55,28 +56,49 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.fullName || !formData.email || !formData.username || !formData.password || !formData.role) {
       toast.error("Please fill in all fields");
       return;
     }
-    
+
     if (!allRequirementsMet) {
       toast.error("Password does not meet security requirements");
       return;
     }
-    
+
     if (!passwordsMatch) {
       toast.error("Passwords do not match");
       return;
     }
 
     setIsLoading(true);
-    // Simulate registration
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    toast.success("Registration successful! Please check your email to verify your account.");
-    navigate("/login");
+
+    try {
+      // Register user with MongoDB backend (bcrypt password hashing)
+      const result = await ApiService.register(
+        formData.username,
+        formData.email,
+        formData.password,
+        formData.role
+      );
+
+      if (!result.success) {
+        toast.error(result.error || "Registration failed");
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(false);
+      toast.success("Registration successful!", {
+        description: `Account created for ${formData.username}. You can now login.`,
+      });
+      navigate("/login");
+    } catch (error) {
+      console.error("Registration error:", error);
+      toast.error("Registration failed. Please try again.");
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -120,22 +142,20 @@ export default function RegisterPage() {
                       key={role.id}
                       type="button"
                       onClick={() => setFormData({ ...formData, role: role.id })}
-                      className={`p-4 rounded-lg border-2 text-left transition-all ${
-                        formData.role === role.id
-                          ? role.color === "blue"
-                            ? "border-blue-500 bg-blue-500/10"
-                            : "border-purple-500 bg-purple-500/10"
-                          : "border-border hover:border-muted-foreground/50"
-                      }`}
+                      className={`p-4 rounded-lg border-2 text-left transition-all ${formData.role === role.id
+                        ? role.color === "blue"
+                          ? "border-blue-500 bg-blue-500/10"
+                          : "border-purple-500 bg-purple-500/10"
+                        : "border-border hover:border-muted-foreground/50"
+                        }`}
                     >
                       <role.icon
-                        className={`w-6 h-6 mb-2 ${
-                          formData.role === role.id
-                            ? role.color === "blue"
-                              ? "text-blue-400"
-                              : "text-purple-400"
-                            : "text-muted-foreground"
-                        }`}
+                        className={`w-6 h-6 mb-2 ${formData.role === role.id
+                          ? role.color === "blue"
+                            ? "text-blue-400"
+                            : "text-purple-400"
+                          : "text-muted-foreground"
+                          }`}
                       />
                       <div className="font-mono font-medium text-sm">{role.title}</div>
                       <div className="text-xs text-muted-foreground">{role.description}</div>
@@ -203,16 +223,15 @@ export default function RegisterPage() {
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                
+
                 {/* Password Requirements */}
                 <div className="mt-3 p-3 bg-muted/30 rounded-lg">
                   <p className="text-xs text-muted-foreground mb-2 font-mono">Password Requirements:</p>
                   <div className="grid grid-cols-2 gap-1">
                     {passwordRequirements.map((req, i) => (
                       <div key={i} className="flex items-center gap-1.5">
-                        <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${
-                          req.met ? "bg-primary" : "bg-muted-foreground/30"
-                        }`}>
+                        <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${req.met ? "bg-primary" : "bg-muted-foreground/30"
+                          }`}>
                           {req.met && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
                         </div>
                         <span className={`text-xs ${req.met ? "text-foreground" : "text-muted-foreground"}`}>
@@ -232,9 +251,8 @@ export default function RegisterPage() {
                     id="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
                     placeholder="Confirm your password"
-                    className={`font-mono pr-10 ${
-                      formData.confirmPassword && !passwordsMatch ? "border-destructive" : ""
-                    }`}
+                    className={`font-mono pr-10 ${formData.confirmPassword && !passwordsMatch ? "border-destructive" : ""
+                      }`}
                     value={formData.confirmPassword}
                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                   />

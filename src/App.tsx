@@ -10,8 +10,11 @@ import DashboardSelector from "./pages/dashboard/DashboardSelector";
 import StudentDashboard from "./pages/dashboard/StudentDashboard";
 import ReviewerDashboard from "./pages/dashboard/ReviewerDashboard";
 import AdminDashboard from "./pages/dashboard/AdminDashboard";
+import SecurityDemo from "./pages/SecurityDemo";
 import NotFound from "./pages/NotFound";
 import { SecurityProvider } from "@/context/SecurityContext";
+import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
+import { UserRole } from "@/services/AccessControlService";
 
 const queryClient = new QueryClient();
 
@@ -26,10 +29,27 @@ const App = () => (
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
-            <Route path="/dashboard" element={<DashboardSelector />} />
-            <Route path="/dashboard/student" element={<StudentDashboard />} />
-            <Route path="/dashboard/reviewer" element={<ReviewerDashboard />} />
-            <Route path="/dashboard/admin" element={<AdminDashboard />} />
+            <Route path="/security-demo" element={<SecurityDemo />} />
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <DashboardSelector />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/student" element={
+              <ProtectedRoute allowedRoles={[UserRole.STUDENT]}>
+                <StudentDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/reviewer" element={
+              <ProtectedRoute allowedRoles={[UserRole.REVIEWER]}>
+                <ReviewerDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/admin" element={
+              <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

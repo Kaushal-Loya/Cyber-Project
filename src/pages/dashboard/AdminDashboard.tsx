@@ -28,7 +28,7 @@ import { RoleBadge } from "@/components/ui/RoleBadge";
 import { GlowCard } from "@/components/layout/GlowCard";
 import { HashDisplay } from "@/components/ui/HashDisplay";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { MockDatabaseService } from "@/services/MockDatabaseService";
 import { useSecurity } from "@/context/SecurityContext";
@@ -37,6 +37,7 @@ import { CryptoService } from "@/services/CryptoService";
 type Tab = "users" | "evaluations" | "audit";
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const { user, logout, getPublicKey } = useSecurity();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("evaluations");
@@ -190,7 +191,7 @@ export default function AdminDashboard() {
                   <RoleBadge role="admin" size="sm" />
                 </div>
               </div>
-              <Button variant="ghost" size="sm" className="w-full justify-start font-mono" onClick={() => logout()}>
+              <Button variant="ghost" size="sm" className="w-full justify-start font-mono" onClick={() => { logout(); navigate('/'); }}>
                 <LogOut className="w-4 h-4 mr-2" />
                 Sign Out
               </Button>

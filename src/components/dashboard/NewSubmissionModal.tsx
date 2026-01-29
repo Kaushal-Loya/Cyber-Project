@@ -67,31 +67,13 @@ export const NewSubmissionModal: React.FC<NewSubmissionModalProps> = ({ open, on
             // MOCK: Fetch a specific reviewer key. In a real scenario, this comes from a directory.
             // We will look for a key in localStorage 'public_key_directory'
             const dir = JSON.parse(localStorage.getItem('public_key_directory') || '{}');
-            let reviewerPubKeyStr = Object.values(dir).find((d: any) => d.email?.includes('reviewer')) as any;
+            let reviewerPubKeyStr = Object.values(dir).find((d: any) => d.email?.includes('reviewer') || d.email?.includes('roberts') || d.email?.includes('williams')) as any;
 
-            let reviewerPubKey;
-            if (reviewerPubKeyStr) {
-                reviewerPubKey = await CryptoService.importPublicKey(reviewerPubKeyStr.encPub, 'encrypt');
-            } else {
-                // Fallback: If no reviewer exists, we use the CURRENT USER's key just to demonstrate the wrapping works, 
-                // or alert the user "No Reviewer Found".
-                // Better: Create a dummy reviewer key for the demo if missing.
-                const dummyKeys = await CryptoService.generateEncryptionKeyPair();
-                // Store this dummy key so the Reviewer Dashboard can find it later (We'd need to save the private key somewhere accessible to "Any Reviewer" login).
-                // This is tricky without a backend.
-                // SIMPLIFICATION: We assume the current user is submitting to THEMSELVES if no reviewer exists, OR we allow "Any key".
-                // Let's use the current user's key for the demo if no reviewer is found, with a warning.
-                // Ideally, the user should login as Reviewer first to set up keys.
-                if (Object.keys(dir).length > 0) {
-                    // Just pick the first one
-                    const first = Object.values(dir)[0] as any;
-                    reviewerPubKey = await CryptoService.importPublicKey(first.encPub, 'encrypt');
-                } else {
-                    // Generate a temporary one
-                    reviewerPubKey = (await CryptoService.generateEncryptionKeyPair()).publicKey;
-                }
+            if (!reviewerPubKeyStr) {
+                throw new Error("Reviewer Public Key not found! Please log in as a 'Reviewer' (e.g. reviewer@demo.edu) in this browser first to generate keys.");
             }
 
+            const reviewerPubKey = await CryptoService.importPublicKey(reviewerPubKeyStr.encPub, 'encrypt');
             const encryptedKey = await CryptoService.wrapKey(aesKey, reviewerPubKey);
 
             // 6. Submit

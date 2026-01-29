@@ -16,7 +16,7 @@ export class CryptoService {
     const len = binary_string.length;
     const bytes = new Uint8Array(len);
     for (let i = 0; i < len; i++) {
-        bytes[i] = binary_string.charCodeAt(i);
+      bytes[i] = binary_string.charCodeAt(i);
     }
     return bytes.buffer;
   }
@@ -34,18 +34,18 @@ export class CryptoService {
       ["sign", "verify"]
     );
   }
-  
+
   // Generate RSA Key Pair for Encryption (Separate key recommended for encryption vs signing)
   static async generateEncryptionKeyPair(): Promise<CryptoKeyPair> {
     return await window.crypto.subtle.generateKey(
-        {
-            name: "RSA-OAEP",
-            modulusLength: 2048,
-            publicExponent: new Uint8Array([1, 0, 1]),
-            hash: "SHA-256",
-        },
-        true,
-        ["encrypt", "decrypt"]
+      {
+        name: "RSA-OAEP",
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: "SHA-256",
+      },
+      true,
+      ["encrypt", "decrypt", "wrapKey", "unwrapKey"]
     );
   }
 
@@ -104,39 +104,45 @@ export class CryptoService {
   // Import Key (Public) from Base64
   static async importPublicKey(base64Key: string, usage: "verify" | "encrypt" = "verify"): Promise<CryptoKey> {
     const binaryDer = this.base64ToArrayBuffer(base64Key);
-    const alg = usage === "verify" 
-        ? { name: "RSA-PSS", hash: "SHA-256" }
-        : { name: "RSA-OAEP", hash: "SHA-256" };
-    
+    const alg = usage === "verify"
+      ? { name: "RSA-PSS", hash: "SHA-256" }
+      : { name: "RSA-OAEP", hash: "SHA-256" };
+
+    // If usage is 'encrypt' (RSA-OAEP), we also need 'wrapKey' to potentially wrap AES keys
+    const usages: KeyUsage[] = usage === "verify" ? ["verify"] : ["encrypt", "wrapKey"];
+
     return await window.crypto.subtle.importKey(
       "spki",
       binaryDer,
       alg,
       true,
-      [usage]
+      usages
     );
   }
 
-    // Export Key (Private) to Base64 - CAREFUL: Only for local storage/demo
+  // Export Key (Private) to Base64 - CAREFUL: Only for local storage/demo
   static async exportPrivateKey(key: CryptoKey): Promise<string> {
     const exported = await window.crypto.subtle.exportKey("pkcs8", key);
     return this.arrayBufferToBase64(exported);
   }
 
-    // Import Key (Private) from Base64
+  // Import Key (Private) from Base64
   static async importPrivateKey(base64Key: string, usage: "sign" | "decrypt" = "sign"): Promise<CryptoKey> {
-      const binaryDer = this.base64ToArrayBuffer(base64Key);
-      const alg = usage === "sign" 
-        ? { name: "RSA-PSS", hash: "SHA-256" }
-        : { name: "RSA-OAEP", hash: "SHA-256" };
+    const binaryDer = this.base64ToArrayBuffer(base64Key);
+    const alg = usage === "sign"
+      ? { name: "RSA-PSS", hash: "SHA-256" }
+      : { name: "RSA-OAEP", hash: "SHA-256" };
 
-      return await window.crypto.subtle.importKey(
-        "pkcs8",
-        binaryDer,
-        alg,
-        true,
-        [usage]
-      );
+    // If usage is 'decrypt', we also need 'unwrapKey' to unwrap AES keys
+    const usages: KeyUsage[] = usage === "sign" ? ["sign"] : ["decrypt", "unwrapKey"];
+
+    return await window.crypto.subtle.importKey(
+      "pkcs8",
+      binaryDer,
+      alg,
+      true,
+      usages
+    );
   }
 
   // Sign Data (RSA-PSS)
@@ -174,29 +180,29 @@ export class CryptoService {
     const hash = await window.crypto.subtle.digest("SHA-256", enc.encode(data));
     return this.arrayBufferToBase64(hash);
   }
-  
+
   // Wrap AES Key with RSA Public Key
   static async wrapKey(aesKey: CryptoKey, rsaPublicKey: CryptoKey): Promise<string> {
-      const wrapped = await window.crypto.subtle.wrapKey(
-          "raw",
-          aesKey,
-          rsaPublicKey,
-          { name: "RSA-OAEP" }
-      );
-      return this.arrayBufferToBase64(wrapped);
+    const wrapped = await window.crypto.subtle.wrapKey(
+      "raw",
+      aesKey,
+      rsaPublicKey,
+      { name: "RSA-OAEP" }
+    );
+    return this.arrayBufferToBase64(wrapped);
   }
-  
+
   // Unwrap AES Key with RSA Private Key
   static async unwrapKey(wrappedKeyBase64: string, rsaPrivateKey: CryptoKey): Promise<CryptoKey> {
-      const wrappedKey = this.base64ToArrayBuffer(wrappedKeyBase64);
-      return await window.crypto.subtle.unwrapKey(
-          "raw",
-          wrappedKey,
-          rsaPrivateKey,
-          { name: "RSA-OAEP" },
-          { name: "AES-GCM", length: 256 },
-          true,
-          ["encrypt", "decrypt"]
-      );
+    const wrappedKey = this.base64ToArrayBuffer(wrappedKeyBase64);
+    return await window.crypto.subtle.unwrapKey(
+      "raw",
+      wrappedKey,
+      rsaPrivateKey,
+      { name: "RSA-OAEP" },
+      { name: "AES-GCM", length: 256 },
+      true,
+      ["encrypt", "decrypt"]
+    );
   }
 }
