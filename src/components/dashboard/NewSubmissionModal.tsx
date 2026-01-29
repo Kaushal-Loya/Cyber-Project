@@ -1,11 +1,11 @@
 
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CryptoService } from '@/services/CryptoService';
-import { MockDatabaseService } from '@/services/MockDatabaseService';
+import ApiService from '@/services/ApiService';
 import { useSecurity } from '@/context/SecurityContext';
 import { Loader2, Lock, ShieldCheck, FileKey, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -43,7 +43,6 @@ export const NewSubmissionModal: React.FC<NewSubmissionModalProps> = ({ open, on
 
             // 2. Hash File (SHA-256) for Integrity
             setStep('Hashing original file (SHA-256)...');
-            // Adding a small delay to make the process visible to the user
             await new Promise(r => setTimeout(r, 800));
             const integrityHash = await CryptoService.hashData(CryptoService.arrayBufferToBase64(fileBuffer));
 
@@ -57,49 +56,52 @@ export const NewSubmissionModal: React.FC<NewSubmissionModalProps> = ({ open, on
             await new Promise(r => setTimeout(r, 800));
             const { iv, cipherText } = await CryptoService.encryptData(fileBuffer, aesKey);
 
-            // 5. Encrypt AES Key with Reviewer Public Key (RSA)
-            // For demo, we try to find a reviewer key, or default to a "System" key (simulated by self-encryption if no reviewer found for demo purposes, but realistically should be public key)
-            // I'll simulate fetching a "Course Reviewer Key". 
-            // If we don't have one, we'll generate one on the fly for the "Demo Reviewer" just so the flow works.
+            // 5. Wrap AES Key with Reviewer Public Key (RSA)
+            setStep('Fetching Reviewer Public Key...');
+            await new Promise(r => setTimeout(r, 500));
+
+            // Fetch reviewer keys from MongoDB backend
+            const reviewerKeysResponse = await ApiService.getReviewerKeys();
+
+            if (!reviewerKeysResponse.reviewers || reviewerKeysResponse.reviewers.length === 0) {
+                throw new Error("No reviewers found in the system. Please ask an admin to create a reviewer account and login to generate keys.");
+            }
+
+            // Use first available reviewer (in production, this would be assigned by admin)
+            const reviewer = reviewerKeysResponse.reviewers[0];
+
             setStep('Wrapping AES Key with RSA Public Key...');
             await new Promise(r => setTimeout(r, 800));
 
-            // MOCK: Fetch a specific reviewer key. In a real scenario, this comes from a directory.
-            // We will look for a key in localStorage 'public_key_directory'
-            const dir = JSON.parse(localStorage.getItem('public_key_directory') || '{}');
-            let reviewerPubKeyStr = Object.values(dir).find((d: any) => d.email?.includes('reviewer') || d.email?.includes('roberts') || d.email?.includes('williams')) as any;
-
-            if (!reviewerPubKeyStr) {
-                throw new Error("Reviewer Public Key not found! Please log in as a 'Reviewer' (e.g. reviewer@demo.edu) in this browser first to generate keys.");
-            }
-
-            const reviewerPubKey = await CryptoService.importPublicKey(reviewerPubKeyStr.encPub, 'encrypt');
+            const reviewerPubKey = await CryptoService.importPublicKey(reviewer.encPub, 'encrypt');
             const encryptedKey = await CryptoService.wrapKey(aesKey, reviewerPubKey);
 
-            // 6. Submit
-            setStep('Securely uploading Submission...');
+            // 6. Submit to MongoDB via ApiService
+            setStep('Securely uploading to MongoDB...');
             await new Promise(r => setTimeout(r, 800));
 
-            MockDatabaseService.saveSubmission({
-                id: crypto.randomUUID(),
-                studentId: user.id,
+            await ApiService.submitProject({
                 title,
-                status: 'pending',
-                submittedAt: new Date().toISOString(),
-                fileHash: integrityHash,
                 encryptedData: cipherText,
                 encryptedKey: encryptedKey,
                 iv: iv,
+                fileHash: integrityHash,
+                reviewerId: reviewer._id?.toString() || reviewer.id?.toString(),
+                originalName: file.name
             });
 
             setStep('Done!');
-            toast.success("Submission Encrypted and Uploaded Successfully");
+            toast.success("Encrypted Project Uploaded to MongoDB Successfully! 🔐");
             onSuccess();
             onClose();
 
+            // Reset form
+            setTitle('');
+            setFile(null);
+
         } catch (error) {
             console.error(error);
-            toast.error("Encryption failed: " + (error as any).message);
+            toast.error("Encryption/Upload failed: " + (error as any).message);
         } finally {
             setLoading(false);
             setStep('');
@@ -111,6 +113,9 @@ export const NewSubmissionModal: React.FC<NewSubmissionModalProps> = ({ open, on
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>Secure Project Submission</DialogTitle>
+                    <DialogDescription>
+                        Your file will be encrypted locally before being uploaded.
+                    </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                     <div className="space-y-2">

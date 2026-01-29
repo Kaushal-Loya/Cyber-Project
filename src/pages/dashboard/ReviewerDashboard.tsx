@@ -27,83 +27,66 @@ import { HashDisplay } from "@/components/ui/HashDisplay";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { MockDatabaseService, Submission } from "@/services/MockDatabaseService";
+import ApiService from "@/services/ApiService";
+import { Submission } from "@/services/MockDatabaseService";
 import { useSecurity } from "@/context/SecurityContext";
 import { CryptoService } from "@/services/CryptoService";
+
+type ReviewerTab = "pending" | "evaluated";
 
 export default function ReviewerDashboard() {
   const navigate = useNavigate();
   const { user, logout, encryptionKeys, signingKeys } = useSecurity();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<ReviewerTab>("pending");
   const [projects, setProjects] = useState<any[]>([]);
   const [evaluatingProject, setEvaluatingProject] = useState<any | null>(null);
   const [evaluationForm, setEvaluationForm] = useState({ grade: "", feedback: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [decryptingId, setDecryptingId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadProjects();
   }, [user]);
 
-  const loadProjects = () => {
-    const allSubmissions = MockDatabaseService.getSubmissions();
-    const evaluations = MockDatabaseService.getEvaluations();
-
-    // In a real app, strict assignment. Here, we see pending or assigned to me.
-    // Simplifying: Reviewer sees all pending + all evaluated by them.
-    const relevantProjects = allSubmissions.map(p => {
-      const ev = evaluations.find(e => e.submissionId === p.id);
-      const status = ev ? 'reviewed' : 'pending_review';
-      return {
-        ...p,
-        status,
-        evaluation: ev ? {
-          ...ev,
-          signedAt: ev.timestamp,
-          signatureHash: ev.signature
-        } : undefined
-      };
-    }).filter(p => p.status === 'pending_review' || p.evaluation?.evaluatorId === user?.id);
-
-    setProjects(relevantProjects);
+  const loadProjects = async () => {
+    try {
+      setIsLoading(true);
+      const response = await ApiService.getAssignedProjects();
+      if (response.success) {
+        setProjects(response.projects || []);
+      }
+    } catch (e) {
+      console.error("Failed to load assigned projects", e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDecryptAndDownload = async (project: Submission) => {
+  const handleDecryptAndDownload = async (project: any) => {
     if (!encryptionKeys) {
       toast.error("Encryption keys not loaded. Please re-login.");
       return;
     }
     try {
       setDecryptingId(project.id);
-      // 1. Unwrap Key
-      // Note: In NewSubmissionModal we tried to use a reviewer key.
-      // If we are the reviewer, we should have the private key corresponding to the public key used.
-      // If the student used a "System Key" or "Random Key", verification might fail if we don't hold the private key.
-      // For the DEMO, if unwrap fails, we might catch it.
-
       const aesKey = await CryptoService.unwrapKey(project.encryptedKey, encryptionKeys.privateKey);
-
-      // 2. Decrypt Content
       const fileBuffer = await CryptoService.decryptData(project.encryptedData, project.iv, aesKey);
-
-      // 3. Verify Hash
       const decryptedBase64 = CryptoService.arrayBufferToBase64(fileBuffer);
       const calculatedHash = await CryptoService.hashData(decryptedBase64);
 
       if (calculatedHash !== project.fileHash) {
         toast.error("Integrity Check Failed! Hash mismatch.");
-        console.error("Hash mismatch", calculatedHash, project.fileHash);
-        // We allow download but warn
       } else {
         toast.success("Integrity Verified. File Decrypted.");
       }
 
-      // 4. Download
       const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `submission_${project.id}.bin`; // We don't know extension unless stored.
+      a.download = project.originalName || `submission_${project.id}.bin`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -130,37 +113,35 @@ export default function ReviewerDashboard() {
 
     try {
       setIsSubmitting(true);
-
-      // 1. Create Data Payload to Sign
       const payload = `${evaluatingProject.id}:${evaluationForm.grade}:${evaluationForm.feedback}`;
-
-      // 2. Digitally Sign
       const signature = await CryptoService.signData(payload, signingKeys.privateKey);
 
-      // 3. Submit
-      MockDatabaseService.saveEvaluation({
-        id: crypto.randomUUID(),
+      await ApiService.submitEvaluation({
         submissionId: evaluatingProject.id,
-        evaluatorId: user.id,
-        score: 0, // mapping grade to score if needed, or just store grade in feedback/score field? Wait, interface says number.
-        // Let's store grade string in feedback or assume score is number.
-        // I'll adjust interface or just use 0.
-        grading: evaluationForm.grade, // Need to fix interface or casts
-        feedback: evaluationForm.feedback, // + " Grade: " + evaluationForm.grade
-        signature: signature,
-        timestamp: new Date().toISOString()
-      } as any);
+        score: 0,
+        grading: evaluationForm.grade,
+        feedback: evaluationForm.feedback,
+        signature: signature
+      });
 
       toast.success("Evaluation signed and submitted successfully!");
       setEvaluatingProject(null);
       setEvaluationForm({ grade: "", feedback: "" });
-      loadProjects();
+
+      // Automatic Reload
+      await loadProjects();
+      setActiveTab("evaluated"); // Shift to evaluated section
     } catch (e: any) {
       toast.error("Signing failed: " + e.message);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const filteredProjects = projects.filter(p => {
+    if (activeTab === "pending") return p.status === "pending";
+    return p.status === "evaluated" || p.status === "published";
+  });
 
   return (
     <GridBackground>
@@ -188,13 +169,28 @@ export default function ReviewerDashboard() {
             <nav className="flex-1 p-4">
               <ul className="space-y-2">
                 <li>
-                  <a
-                    href="#"
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary font-mono text-sm"
+                  <button
+                    onClick={() => setActiveTab("pending")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg font-mono text-sm transition-colors ${activeTab === "pending"
+                      ? "bg-primary/10 text-primary"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
                   >
-                    <FileText className="w-4 h-4" />
-                    Assigned Projects
-                  </a>
+                    <Clock className="w-4 h-4" />
+                    Pending Reviews
+                  </button>
+                </li>
+                <li>
+                  <button
+                    onClick={() => setActiveTab("evaluated")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg font-mono text-sm transition-colors ${activeTab === "evaluated"
+                      ? "bg-primary/10 text-primary"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Evaluated
+                  </button>
                 </li>
               </ul>
             </nav>
@@ -206,7 +202,7 @@ export default function ReviewerDashboard() {
                   {user?.email?.charAt(0).toUpperCase() || 'R'}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-mono text-sm font-medium truncate">{user?.email || 'Reviewer'}</p>
+                  <p className="font-mono text-sm font-medium truncate">{user?.username || user?.email || 'Reviewer'}</p>
                   <RoleBadge role="reviewer" size="sm" />
                 </div>
               </div>
@@ -239,8 +235,12 @@ export default function ReviewerDashboard() {
                   {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                 </button>
                 <div>
-                  <h1 className="font-mono text-xl font-bold">Assigned Projects</h1>
-                  <p className="text-sm text-muted-foreground">Review and evaluate student projects</p>
+                  <h1 className="font-mono text-xl font-bold">
+                    {activeTab === "pending" ? "Pending Reviews" : "Evaluated Projects"}
+                  </h1>
+                  <p className="text-sm text-muted-foreground">
+                    {activeTab === "pending" ? "Review and evaluate student projects" : "View your past evaluations"}
+                  </p>
                 </div>
               </div>
               <StatusIndicator status="secure" label="Session Secure" pulse />
@@ -256,7 +256,7 @@ export default function ReviewerDashboard() {
                   <div>
                     <p className="text-sm text-muted-foreground">Pending Reviews</p>
                     <p className="text-3xl font-mono font-bold">
-                      {projects.filter((p) => p.status === "pending_review").length}
+                      {projects.filter((p) => p.status === "pending").length}
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -267,9 +267,9 @@ export default function ReviewerDashboard() {
               <GlowCard>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Completed</p>
+                    <p className="text-sm text-muted-foreground">Completed Evaluated</p>
                     <p className="text-3xl font-mono font-bold">
-                      {projects.filter((p) => p.status === "reviewed").length}
+                      {projects.filter((p) => p.status === "evaluated" || p.status === "published").length}
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -293,80 +293,91 @@ export default function ReviewerDashboard() {
             {/* Projects List */}
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-                <h2 className="font-mono font-semibold">Projects to Review</h2>
+                <h2 className="font-mono font-semibold">
+                  {activeTab === "pending" ? "Projects to Review" : "Evaluated Projects History"}
+                </h2>
                 <div className="flex items-center gap-2">
                   <SecurityBadge variant="encrypted">Read-Only Access</SecurityBadge>
                 </div>
               </div>
               <div className="divide-y divide-border">
-                {projects.length === 0 ? (
-                  <div className="p-8 text-center text-muted-foreground">No projects assigned</div>
-                ) : projects.map((project) => (
+                {isLoading ? (
+                  <div className="p-8 text-center text-muted-foreground">Loading projects...</div>
+                ) : filteredProjects.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">No projects found in this section.</div>
+                ) : filteredProjects.map((project) => (
                   <motion.div
-                    key={project.id}
+                    key={project._id || project.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="p-6"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
+                    <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+                      <div className="flex-1 w-full">
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-mono font-medium">{project.title}</h3>
-                          {project.status === "pending_review" ? (
+                          <h3 className="font-mono font-medium text-lg">{project.title}</h3>
+                          {project.status === "pending" ? (
                             <SecurityBadge variant="warning">Pending Review</SecurityBadge>
+                          ) : project.status === "published" ? (
+                            <SecurityBadge variant="verified">Published</SecurityBadge>
                           ) : (
-                            <SecurityBadge variant="signed">Signed</SecurityBadge>
+                            <SecurityBadge variant="signed">Evaluated</SecurityBadge>
                           )}
                         </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-                          <span>Student ID: <span className="font-mono">{project.studentId.substring(0, 8)}...</span></span>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
+                          <span>Student ID: <span className="font-mono">{(project.studentId || "").substring(0, 8)}...</span></span>
                           <span className="flex items-center gap-1.5">
                             <Clock className="w-4 h-4" />
                             Submitted {new Date(project.submittedAt).toLocaleDateString()}
                           </span>
                         </div>
 
-                        <HashDisplay
-                          hash={project.fileHash}
-                          label="Project File Hash"
-                          algorithm="SHA-256"
-                          truncate
-                        />
-
-                        {project.evaluation && (
-                          <div className="mt-4 p-4 bg-muted/30 rounded-lg border border-border">
-                            <div className="flex items-center gap-2 mb-2">
-                              <FileCheck className="w-4 h-4 text-primary" />
-                              <span className="font-mono text-sm font-medium">Your Evaluation</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4 mb-3">
-                              <div>
-                                <p className="text-xs text-muted-foreground">Grade</p>
-                                <p className="font-mono font-bold text-primary">{project.evaluation.grading || 'N/A'}</p>
+                        {activeTab === "evaluated" && project.evaluation ? (
+                          <div className="mt-4 p-5 bg-muted/20 rounded-xl border border-border/50">
+                            <div className="flex flex-col md:flex-row justify-between gap-6">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <FileCheck className="w-4 h-4 text-primary" />
+                                  <span className="font-mono text-sm font-bold uppercase tracking-wider">Evaluation Details</span>
+                                </div>
+                                <div className="mb-4">
+                                  <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Feedback</p>
+                                  <p className="text-sm text-foreground/90 leading-relaxed">{project.evaluation.feedback}</p>
+                                </div>
+                                <HashDisplay
+                                  hash={project.evaluation.signature}
+                                  label="Your Digital Signature"
+                                  algorithm="RSA-SHA256"
+                                  truncate
+                                />
                               </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground">Signed At</p>
-                                <p className="font-mono text-sm">
-                                  {new Date(project.evaluation.signedAt).toLocaleString()}
-                                </p>
+                              <div className="md:text-right flex flex-col items-start md:items-end gap-4 min-w-[120px]">
+                                <div>
+                                  <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Grade</p>
+                                  <p className="text-3xl font-mono font-bold text-primary">{project.evaluation.grading}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Signed Date</p>
+                                  <p className="font-mono text-xs">{new Date(project.evaluation.timestamp).toLocaleString()}</p>
+                                </div>
                               </div>
                             </div>
-                            <p className="text-sm text-muted-foreground mb-3">{project.evaluation.feedback}</p>
-                            <HashDisplay
-                              hash={project.evaluation.signatureHash}
-                              label="Digital Signature"
-                              algorithm="RSA-SHA256"
-                              truncate
-                            />
                           </div>
+                        ) : (
+                          <HashDisplay
+                            hash={project.fileHash}
+                            label="Project File Hash"
+                            algorithm="SHA-256"
+                            truncate
+                          />
                         )}
                       </div>
 
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-2 w-full md:w-auto mt-4 md:mt-0">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="font-mono"
+                          className="font-mono w-full"
                           onClick={() => handleDecryptAndDownload(project)}
                           disabled={decryptingId === project.id}
                         >
@@ -377,10 +388,10 @@ export default function ReviewerDashboard() {
                           )}
                           Decrypt & View
                         </Button>
-                        {project.status === "pending_review" && (
+                        {project.status === "pending" && (
                           <Button
                             size="sm"
-                            className="font-mono"
+                            className="font-mono w-full"
                             onClick={() => setEvaluatingProject(project)}
                           >
                             <PenLine className="w-4 h-4 mr-2" />
@@ -490,3 +501,4 @@ export default function ReviewerDashboard() {
     </GridBackground>
   );
 }
+

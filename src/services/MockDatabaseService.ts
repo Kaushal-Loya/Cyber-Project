@@ -6,11 +6,13 @@ export interface Submission {
     status: 'pending' | 'under_review' | 'evaluated' | 'rejected';
     submittedAt: string;
     fileHash: string; // SHA-256 of original file
+    originalName?: string;
     encryptedData: string; // Base64
     encryptedKey: string; // Base64 (Wrapped AES Key)
     iv: string; // Base64
     evaluatorId?: string;
     evaluationId?: string;
+    _id?: string;
 }
 
 export interface Evaluation {

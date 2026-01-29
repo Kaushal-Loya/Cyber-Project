@@ -143,9 +143,6 @@ export default function LandingPage() {
                   Start Secure Session
                 </Button>
               </Link>
-              <Button size="lg" variant="outline" className="font-mono text-lg px-8">
-                View Documentation
-              </Button>
             </div>
           </motion.div>
 

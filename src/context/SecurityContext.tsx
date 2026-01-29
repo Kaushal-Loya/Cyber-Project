@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { CryptoService } from "@/services/CryptoService";
+import ApiService from "@/services/ApiService";
 import { supabase } from "@/integrations/supabase/client";
 import { UserRole } from "@/services/AccessControlService";
 
@@ -12,7 +13,7 @@ interface SecurityContextType {
     isAuthenticated: boolean;
     isLoading: boolean;
     login: (email: string, role: UserRole) => Promise<void>;
-    mockLogin: (email: string, role: UserRole) => Promise<void>;
+    mockLogin: (email: string, role: UserRole, username?: string) => Promise<void>;
     logout: () => Promise<void>;
     generateAndStoreKeys: () => Promise<void>;
     getPublicKey: (userId: string, type: "sign" | "encrypt") => Promise<CryptoKey | null>;
@@ -94,6 +95,17 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             };
             setEncryptionKeys(encKeyPair);
             setSigningKeys(signKeyPair);
+
+            // Sync public keys to MongoDB (in case they were only local before)
+            // This is idempotent and ensures the backend has the keys
+            const token = localStorage.getItem('token');
+            if (token) {
+                try {
+                    await ApiService.updatePublicKeys(encPub, signPub);
+                } catch (e) {
+                    console.warn("Failed to sync keys to backend, might be already updated or unauthorized:", e);
+                }
+            }
         } else {
             // Generate new keys (Simulate Registration)
             await generateAndStoreKeys(userId);
@@ -109,7 +121,7 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setEncryptionKeys(encKeys);
         setSigningKeys(signKeys);
 
-        // Store in LocalStorage
+        // Store in LocalStorage (private keys stay local!)
         const encPriv = await CryptoService.exportPrivateKey(encKeys.privateKey);
         const encPub = await CryptoService.exportPublicKey(encKeys.publicKey);
         const signPriv = await CryptoService.exportPrivateKey(signKeys.privateKey);
@@ -119,6 +131,14 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         localStorage.setItem(`enc_pub_${userId}`, encPub);
         localStorage.setItem(`sign_priv_${userId}`, signPriv);
         localStorage.setItem(`sign_pub_${userId}`, signPub);
+
+        // Store public keys in MongoDB for other users to access
+        try {
+            await ApiService.updatePublicKeys(encPub, signPub);
+            console.log('✅ Public keys uploaded to MongoDB');
+        } catch (error) {
+            console.error('Failed to upload public keys to backend:', error);
+        }
 
         const dir = JSON.parse(localStorage.getItem('public_key_directory') || '{}');
         dir[userId] = { encPub, signPub, email: userId.includes('@') ? userId : undefined }; // simple email check
@@ -133,10 +153,11 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
     };
 
-    const mockLogin = async (email: string, role: UserRole) => {
+    const mockLogin = async (email: string, role: UserRole, username?: string) => {
         const mockUser = {
             id: email, // Use email as ID for demo
             email: email,
+            username: username || email.split('@')[0],
             aud: 'authenticated',
             created_at: new Date().toISOString(),
         };
@@ -164,6 +185,7 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         // Clear demo persistence
         localStorage.removeItem('demo_user');
         localStorage.removeItem('demo_role');
+        localStorage.removeItem('token');
 
         setUser(null);
         setRole(null);

@@ -20,6 +20,7 @@ import {
   Check,
   XCircle,
   Send,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GridBackground } from "@/components/layout/GridBackground";
@@ -30,11 +31,12 @@ import { HashDisplay } from "@/components/ui/HashDisplay";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { MockDatabaseService } from "@/services/MockDatabaseService";
+import ApiService from "@/services/ApiService";
 import { useSecurity } from "@/context/SecurityContext";
 import { CryptoService } from "@/services/CryptoService";
 
-type Tab = "users" | "evaluations" | "audit";
+type Tab = "users" | "evaluations" | "submissions" | "audit";
+type SubmissionFilter = "all" | "pending" | "evaluated" | "published";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -43,86 +45,110 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("evaluations");
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [evaluations, setEvaluations] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]); // Mock users
-  const [logs, setLogs] = useState<any[]>([]); // Mock logs
+  const [allProjects, setAllProjects] = useState<any[]>([]);
+  const [submissionFilter, setSubmissionFilter] = useState<SubmissionFilter>("all");
+  const [users, setUsers] = useState<any[]>([]);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadEvaluations();
-    // Use simulated data for users/logs for this demo
-    setLogs([
-      { id: "1", action: "USER_LOGIN", user: "student@univ.edu", timestamp: new Date(Date.now() - 1000000).toISOString(), ip: "192.168.1.100" },
-      { id: "2", action: "PROJECT_SUBMIT", user: "student@univ.edu", timestamp: new Date(Date.now() - 900000).toISOString(), ip: "192.168.1.100" },
-      { id: "3", action: "EVALUATION_SIGN", user: "reviewer@univ.edu", timestamp: new Date(Date.now() - 500000).toISOString(), ip: "192.168.1.102" },
-    ]);
+    loadData();
   }, [user]);
 
-  const loadEvaluations = () => {
-    const allEvals = MockDatabaseService.getEvaluations();
-    const subs = MockDatabaseService.getSubmissions();
-    const joined = allEvals.map(ev => {
-      const sub = subs.find(s => s.id === ev.submissionId);
-      return {
-        ...ev,
-        id: ev.id, // Ensure ID is correct
-        projectTitle: sub?.title || "Unknown Project",
-        student: sub?.studentId || "Unknown Student",
-        reviewer: ev.evaluatorId,
-        grade: ev.grading || "N/A", // Use grading field
-        submittedAt: ev.timestamp,
-        signatureHash: ev.signature,
-        verified: sub?.status === 'evaluated' // Consider verified if status upgraded? Or separate flag needed.
-        // For this demo, we can assume 'evaluated' means pending verification unless we add 'published' status.
-        // Let's assume we need to verify.
-      };
-    });
-    setEvaluations(joined);
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      await Promise.all([
+        loadEvaluations(),
+        loadAllProjects(),
+        loadUsers(),
+        loadLogs()
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleVerifyAndPublish = async (evaluation: any) => {
-    setVerifyingId(evaluation.id);
+  const loadAllProjects = async () => {
     try {
-      // 1. Fetch Reviewer Public Key
-      // In this demo, we might not have a perfect map of evaluatorId to Public Key if we didn't store it properly.
-      // We will try to fetch using the ID.
-      let reviewerPubKey = await getPublicKey(evaluation.reviewer, 'sign');
+      const response = await ApiService.getAllProjects();
+      if (response.success) {
+        setAllProjects(response.projects);
+      }
+    } catch (e) {
+      console.error("Failed to load all projects:", e);
+    }
+  };
 
-      if (!reviewerPubKey) {
-        console.warn("Reviewer key not found, trying fallback for demo");
-        // Fallback for demo: Check if WE are the reviewer (same browser session)
-        // or check the directory manually
-        const dir = JSON.parse(localStorage.getItem('public_key_directory') || '{}');
-        if (dir[evaluation.reviewer]) {
-          reviewerPubKey = await CryptoService.importPublicKey(dir[evaluation.reviewer].signPub, 'verify');
-        }
+  const loadUsers = async () => {
+    try {
+      const response = await ApiService.getAllUsers();
+      if (response.success) {
+        setUsers(response.users);
+      }
+    } catch (e) {
+      console.error("Failed to load users:", e);
+    }
+  };
+
+  const loadLogs = async () => {
+    // Current backend doesn't have an audit route, so we simulate from real data
+    setLogs([
+      { id: "1", action: "SYSTEM_READY", user: "system", timestamp: new Date().toISOString(), ip: "127.0.0.1" },
+      { id: "2", action: "DB_CONNECTED", user: "system", timestamp: new Date(Date.now() - 5000).toISOString(), ip: "127.0.0.1" },
+    ]);
+  };
+
+  const loadEvaluations = async () => {
+    try {
+      const response = await ApiService.getPendingEvaluations();
+      if (response.success) {
+        setEvaluations(response.evaluations || []);
+      }
+    } catch (e) {
+      console.error("Failed to load evaluations:", e);
+    }
+  };
+
+  const handleVerifyAndPublish = async (submission: any) => {
+    const evaluation = submission.evaluation;
+    if (!evaluation) return;
+
+    setVerifyingId(submission.id);
+    try {
+      // 1. Fetch Reviewer Public Key from the directory
+      const dir = JSON.parse(localStorage.getItem('public_key_directory') || '{}');
+      const reviewerKeyData = dir[evaluation.reviewerEmail];
+
+      if (!reviewerKeyData || !reviewerKeyData.signPub) {
+        throw new Error("Reviewer Signature Public Key not found in directory.");
       }
 
-      if (!reviewerPubKey) {
-        throw new Error("Reviewer Public Key not found. Cannot verify signature.");
-      }
+      const reviewerPubKey = await CryptoService.importPublicKey(reviewerKeyData.signPub, 'verify');
 
-      // 2. Recreate Payload
-      const payload = `${evaluation.submissionId}:${evaluation.grade}:${evaluation.feedback}`;
+      // 2. Recreate Payload (ID:Grade:Feedback)
+      const payload = `${submission.id}:${evaluation.grading}:${evaluation.feedback}`;
 
-      // 3. Verify
+      // 3. Verify Signature
       const isValid = await CryptoService.verifySignature(payload, evaluation.signature, reviewerPubKey);
 
       if (isValid) {
         toast.success("Signature Verified! Integrity Confirmed.");
 
-        // 4. Publish (Update Status)
-        MockDatabaseService.updateSubmissionStatus(evaluation.submissionId, 'evaluated'); // Or 'published'
-        // Add to logs
-        const newLog = { id: crypto.randomUUID(), action: "RESULT_PUBLISH", user: user?.email, timestamp: new Date().toISOString(), ip: "127.0.0.1" };
-        setLogs(prev => [newLog, ...prev]);
-
-        // Mark locally as verified (or reload)
-        loadEvaluations();
+        // 4. Publish (Update Status in DB)
+        const result = await ApiService.verifyAndPublish(submission.id);
+        if (result.success) {
+          toast.success("Result published to Student Dashboard.");
+          loadEvaluations();
+          loadAllProjects(); // Update stats and all list
+        }
       } else {
         toast.error("Signature Verification FAILED! Report may have been tampered.");
       }
 
     } catch (e: any) {
       toast.error("Verification Error: " + e.message);
+      console.error(e);
     } finally {
       setVerifyingId(null);
     }
@@ -162,7 +188,31 @@ export default function AdminDashboard() {
                       }`}
                   >
                     <FileCheck className="w-4 h-4" />
-                    Pending Approvals
+                    Pending Publications
+                  </button>
+                </li>
+                <li>
+                  <button
+                    onClick={() => setActiveTab("submissions")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg font-mono text-sm transition-colors ${activeTab === "submissions"
+                      ? "bg-primary/10 text-primary"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    <FileText className="w-4 h-4" />
+                    All Submissions
+                  </button>
+                </li>
+                <li>
+                  <button
+                    onClick={() => setActiveTab("users")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg font-mono text-sm transition-colors ${activeTab === "users"
+                      ? "bg-primary/10 text-primary"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    <Users className="w-4 h-4" />
+                    User Management
                   </button>
                 </li>
                 <li>
@@ -221,12 +271,14 @@ export default function AdminDashboard() {
                 </button>
                 <div>
                   <h1 className="font-mono text-xl font-bold">
-                    {activeTab === "evaluations" && "Pending Approvals"}
+                    {activeTab === "evaluations" && "Pending Publications"}
+                    {activeTab === "submissions" && "All Submissions"}
                     {activeTab === "users" && "User Management"}
                     {activeTab === "audit" && "Audit Logs"}
                   </h1>
                   <p className="text-sm text-muted-foreground">
                     {activeTab === "evaluations" && "Verify signatures and publish results"}
+                    {activeTab === "submissions" && "Monitor all student project submissions"}
                     {activeTab === "users" && "Manage system users and roles"}
                     {activeTab === "audit" && "Security event history"}
                   </p>
@@ -257,7 +309,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Total Users</p>
-                    <p className="text-3xl font-mono font-bold">{users.length || 4}</p>
+                    <p className="text-3xl font-mono font-bold">{users.length}</p>
                   </div>
                   <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
                     <Users className="w-6 h-6 text-primary" />
@@ -268,7 +320,9 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Published Results</p>
-                    <p className="text-3xl font-mono font-bold">12</p>
+                    <p className="text-3xl font-mono font-bold">
+                      {allProjects.filter(p => p.status === 'published' || p.verified).length}
+                    </p>
                   </div>
                   <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center">
                     <CheckCircle2 className="w-6 h-6 text-accent" />
@@ -292,88 +346,252 @@ export default function AdminDashboard() {
             {activeTab === "evaluations" && (
               <div className="bg-card border border-border rounded-lg overflow-hidden">
                 <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-                  <h2 className="font-mono font-semibold">Evaluations Verification Queue</h2>
+                  <h2 className="font-mono font-semibold">Pending Publications</h2>
                   <SecurityBadge variant="secure">Tamper Detection Active</SecurityBadge>
                 </div>
                 {evaluations.length === 0 ? (
                   <div className="p-8 text-center text-muted-foreground">No evaluations pending verification.</div>
                 ) : (
                   <div className="divide-y divide-border">
-                    {evaluations.map((evaluation) => (
+                    {evaluations.map((submission) => (
                       <motion.div
-                        key={evaluation.id}
+                        key={submission.id}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         className="p-6"
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="font-mono font-medium">{evaluation.projectTitle}</h3>
-                              {evaluation.verified ? (
-                                <SecurityBadge variant="verified">Verified</SecurityBadge>
-                              ) : (
-                                <SecurityBadge variant="warning">Awaiting Verification</SecurityBadge>
-                              )}
+                        <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+                          <div className="flex-1 w-full">
+                            <div className="flex items-center gap-3 mb-4">
+                              <h3 className="font-mono text-lg font-bold text-primary">{submission.title}</h3>
+                              <SecurityBadge variant="warning">Awaiting Verification</SecurityBadge>
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
-                              <div>
-                                <p className="text-muted-foreground">Student ID</p>
-                                <p className="font-mono">{evaluation.student.substring(0, 8)}...</p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+                              {/* Left Stack: Users */}
+                              <div className="space-y-4">
+                                <div>
+                                  <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Student</p>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 text-xs font-bold font-mono">
+                                      {submission.studentUsername.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div>
+                                      <p className="font-mono font-medium leading-none">{submission.studentUsername}</p>
+                                      <p className="text-xs text-muted-foreground">{submission.studentEmail}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Reviewer</p>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-500 text-xs font-bold font-mono">
+                                      {submission.evaluation?.reviewerUsername?.charAt(0).toUpperCase() || '?'}
+                                    </div>
+                                    <div>
+                                      <p className="font-mono font-medium leading-none">{submission.evaluation?.reviewerUsername || 'Unknown'}</p>
+                                      <p className="text-xs text-muted-foreground">{submission.evaluation?.reviewerEmail || 'N/A'}</p>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
-                              <div>
-                                <p className="text-muted-foreground">Reviewer ID</p>
-                                <p className="font-mono">{evaluation.reviewer.substring(0, 8)}...</p>
-                              </div>
-                              <div>
-                                <p className="text-muted-foreground">Grade</p>
-                                <p className="font-mono text-primary font-bold">{evaluation.grade}</p>
-                              </div>
-                              <div>
-                                <p className="text-muted-foreground">Signed At</p>
-                                <p className="font-mono">{new Date(evaluation.submittedAt).toLocaleDateString()}</p>
+
+                              {/* Right Stack: Grades & Time */}
+                              <div className="space-y-4 md:text-right md:flex md:flex-col md:items-end">
+                                <div>
+                                  <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Final Grade</p>
+                                  <p className="text-2xl font-mono font-bold text-primary">
+                                    {submission.evaluation?.grading || 'N/A'}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-muted-foreground uppercase font-mono mb-1">Signed Date</p>
+                                  <p className="font-mono text-sm">
+                                    {submission.evaluation ? new Date(submission.evaluation.timestamp).toLocaleString() : 'N/A'}
+                                  </p>
+                                </div>
                               </div>
                             </div>
-                            <HashDisplay
-                              hash={evaluation.signatureHash}
-                              label="Reviewer's Digital Signature (RSA-SHA256)"
-                              algorithm="RSA-SHA256"
-                              truncate
-                            />
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            <Button variant="outline" size="sm" className="font-mono">
-                              <Eye className="w-4 h-4 mr-2" />
-                              Review
-                            </Button>
-                            {!evaluation.verified && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  className="font-mono"
-                                  onClick={() => handleVerifyAndPublish(evaluation)}
-                                  disabled={verifyingId === evaluation.id}
-                                >
-                                  {verifyingId === evaluation.id ? (
-                                    <span className="flex items-center gap-2">
-                                      <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                                      Verifying...
-                                    </span>
-                                  ) : (
-                                    <span className="flex items-center gap-2">
-                                      <Check className="w-4 h-4" />
-                                      Verify & Publish
-                                    </span>
-                                  )}
-                                </Button>
-                              </>
+
+                            {submission.evaluation?.signature && (
+                              <HashDisplay
+                                hash={submission.evaluation.signature}
+                                label="Reviewer's Digital Signature (RSA-SHA256)"
+                                algorithm="RSA-SHA256"
+                                truncate
+                              />
                             )}
+                          </div>
+
+                          <div className="flex flex-col gap-2 w-full md:w-auto mt-4 md:mt-0">
+                            <Button
+                              size="lg"
+                              className="font-mono shadow-lg shadow-primary/20"
+                              onClick={() => handleVerifyAndPublish(submission)}
+                              disabled={verifyingId === submission.id}
+                            >
+                              {verifyingId === submission.id ? (
+                                <span className="flex items-center gap-2">
+                                  <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                                  Verifying...
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-2">
+                                  <Check className="w-5 h-5" />
+                                  Verify & Publish
+                                </span>
+                              )}
+                            </Button>
                           </div>
                         </div>
                       </motion.div>
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === "submissions" && (
+              <div className="bg-card border border-border rounded-lg overflow-hidden">
+                <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <h2 className="font-mono font-semibold">Campus Submissions</h2>
+                    <div className="flex border border-border rounded-md p-0.5 bg-muted/30">
+                      {(["all", "pending", "evaluated", "published"] as SubmissionFilter[]).map((f) => (
+                        <button
+                          key={f}
+                          onClick={() => setSubmissionFilter(f)}
+                          className={`px-3 py-1 text-xs font-mono rounded capitalize transition-colors ${submissionFilter === f ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                            }`}
+                        >
+                          {f}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <SecurityBadge variant="secure">Project Lifecycle Monitoring</SecurityBadge>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="px-6 py-3 text-left text-xs font-mono text-muted-foreground uppercase">Project Title</th>
+                        <th className="px-6 py-3 text-left text-xs font-mono text-muted-foreground uppercase">Student Email</th>
+                        <th className="px-6 py-3 text-left text-xs font-mono text-muted-foreground uppercase">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-mono text-muted-foreground uppercase">Grade</th>
+                        <th className="px-6 py-3 text-left text-xs font-mono text-muted-foreground uppercase">Verified</th>
+                        <th className="px-6 py-3 text-right text-xs font-mono text-muted-foreground uppercase">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {allProjects
+                        .filter(p => {
+                          const displayStatus = p.verified ? "published" : p.status;
+                          if (submissionFilter === "all") return true;
+                          return displayStatus === submissionFilter;
+                        })
+                        .map((p) => (
+                          <tr key={p.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-6 py-4 font-mono text-sm font-medium">{p.title}</td>
+                            <td className="px-6 py-4 font-mono text-xs text-muted-foreground">{p.studentEmail}</td>
+                            <td className="px-6 py-4">
+                              <SecurityBadge
+                                variant={p.status === 'published' || p.verified ? 'verified' : p.status === 'evaluated' ? 'signed' : 'warning'}
+                              >
+                                {p.status === 'published' || p.verified ? 'published' : p.status}
+                              </SecurityBadge>
+                            </td>
+                            <td className="px-6 py-4 font-mono text-sm font-bold text-primary">{p.grade || "-"}</td>
+                            <td className="px-6 py-4">
+                              {p.status === 'published' || p.verified ? (
+                                <CheckCircle2 className="w-4 h-4 text-accent" />
+                              ) : (
+                                <Clock className="w-4 h-4 text-muted-foreground" />
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-right font-mono text-xs text-muted-foreground">
+                              {new Date(p.submittedAt).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "users" && (
+              <div className="bg-card border border-border rounded-lg overflow-hidden">
+                <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+                  <h2 className="font-mono font-semibold">System Users</h2>
+                  <Button size="sm" className="font-mono" onClick={() => toast.info("Registration is currently open for all roles.")}>
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Add User
+                  </Button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="px-6 py-3 text-left text-xs font-mono text-muted-foreground uppercase">User</th>
+                        <th className="px-6 py-3 text-left text-xs font-mono text-muted-foreground uppercase">Role</th>
+                        <th className="px-6 py-3 text-left text-xs font-mono text-muted-foreground uppercase">Security Status</th>
+                        <th className="px-6 py-3 text-right text-xs font-mono text-muted-foreground uppercase">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {users.map((u) => (
+                        <tr key={u._id} className="hover:bg-muted/30 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-mono text-xs font-bold ${u.role === 'admin' ? 'bg-amber-500/20 text-amber-400' :
+                                u.role === 'reviewer' ? 'bg-indigo-500/20 text-indigo-400' :
+                                  'bg-emerald-500/20 text-emerald-400'
+                                }`}>
+                                {u.username.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-mono text-sm leading-none">{u.username}</p>
+                                <p className="text-xs text-muted-foreground mt-1">{u.email}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <RoleBadge role={u.role} size="sm" />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <div className={`w-2 h-2 rounded-full ${u.encPub ? 'bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)]' : 'bg-muted'}`} />
+                                <span className="text-xs font-mono">{u.encPub ? 'RSA Keys Generated' : 'Keys Pending'}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)]" />
+                                <span className="text-xs font-mono text-muted-foreground">MFA Active (Bcrypt)</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="font-mono text-xs"
+                                onClick={() => toast.success(`Viewing credentials for ${u.username}: [PROTECTED BY SCHEMA]`)}
+                              >
+                                <Lock className="w-3 h-3 mr-1" />
+                                Credentials
+                              </Button>
+                              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 

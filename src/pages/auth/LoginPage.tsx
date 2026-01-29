@@ -34,6 +34,7 @@ export default function LoginPage() {
     username: "",
     password: "",
     otp: "",
+    rememberMe: false,
   });
 
   const handleCredentialSubmit = async (e: React.FormEvent) => {
@@ -45,8 +46,11 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // STEP 1: Single-Factor Authentication (MongoDB + bcrypt)
-      const result = await ApiService.login(formData.username, formData.password);
+      // STEP 1: Single-Factor Authentication
+      // Send stored mfaToken if available (using email-aware trust)
+      const tokens = JSON.parse(localStorage.getItem('mfa_trust_tokens') || '{}');
+      const storedMfaToken = tokens[formData.username.toLowerCase()] || tokens[formData.username];
+      const result = await ApiService.login(formData.username, formData.password, storedMfaToken);
 
       if (!result.success) {
         toast.error(result.error || "Authentication failed");
@@ -54,29 +58,45 @@ export default function LoginPage() {
         return;
       }
 
-      // STEP 2: OTP sent via email (nodemailer)
+      // If MFA was skipped (result contains token + user)
+      if (result.token && !result.requiresMFA) {
+        localStorage.setItem('token', result.token);
+
+        // Authenticate context
+        let userRole = UserRole.STUDENT;
+        if (result.user.role === 'reviewer') userRole = UserRole.REVIEWER;
+        else if (result.user.role === 'admin') userRole = UserRole.ADMIN;
+
+        await mockLogin(result.user.email, userRole, result.user.username);
+
+        setIsLoading(false);
+        toast.success("Welcome back! MFA skipped (Trusted Device)", {
+          description: `Logged in as ${result.user.username}`,
+        });
+
+        // Navigate based on role
+        if (userRole === UserRole.ADMIN) navigate("/dashboard/admin");
+        else if (userRole === UserRole.REVIEWER) navigate("/dashboard/reviewer");
+        else navigate("/dashboard/student");
+        return;
+      }
+
+      // Normal flow: STEP 2 OTP sent
       setCurrentUserEmail(result.email);
       setIsLoading(false);
       setStep("otp");
 
-      // Show OTP for demo/testing (remove in production)
-      if (result.otp) {
-        toast.success(`Credentials verified! Check your email for OTP`, {
-          description: `Demo Mode - OTP: ${result.otp}`,
-          duration: 15000,
-        });
-      } else {
-        toast.success(`Credentials verified! OTP sent to ${result.email}`, {
-          description: result.previewUrl ? 'Check console for email preview link' : 'Check your email inbox',
-          duration: 10000,
-        });
-      }
+      // Mask email for security (e.g., k***@gmail.com)
+      const maskEmail = (email: string) => {
+        const [local, domain] = email.split('@');
+        if (local.length <= 2) return email;
+        return `${local[0]}***@${domain}`;
+      };
 
-      // Log preview URL if available (for testing with Ethereal)
-      if (result.previewUrl) {
-        console.log('📧 Email Preview URL:', result.previewUrl);
-        setPreviewUrl(result.previewUrl);
-      }
+      toast.success(`OTP sent to ${maskEmail(result.email)}`, {
+        description: 'Please check your email inbox',
+        duration: 8000,
+      });
 
     } catch (error: any) {
       console.error("Authentication error:", error);
@@ -95,7 +115,7 @@ export default function LoginPage() {
 
     try {
       // STEP 3: Multi-Factor Authentication - Verify OTP from MongoDB
-      const result = await ApiService.verifyOTP(currentUserEmail, formData.otp);
+      const result = await ApiService.verifyOTP(currentUserEmail, formData.otp, formData.rememberMe);
 
       if (!result.success) {
         toast.error(result.error || "OTP verification failed");
@@ -104,7 +124,7 @@ export default function LoginPage() {
       }
 
       // Store JWT token
-      localStorage.setItem('auth_token', result.token);
+      localStorage.setItem('token', result.token);
 
       // Map role to UserRole enum
       let userRole = UserRole.STUDENT;
@@ -112,7 +132,14 @@ export default function LoginPage() {
       else if (result.user.role === 'admin') userRole = UserRole.ADMIN;
 
       // Authenticate via SecurityContext
-      await mockLogin(result.user.email, userRole);
+      await mockLogin(result.user.email, userRole, result.user.username);
+
+      // Handle MFA Trust Token (Remember Me)
+      if (result.mfaToken) {
+        const tokens = JSON.parse(localStorage.getItem('mfa_trust_tokens') || '{}');
+        tokens[result.user.email.toLowerCase()] = result.mfaToken;
+        localStorage.setItem('mfa_trust_tokens', JSON.stringify(tokens));
+      }
 
       setIsLoading(false);
       toast.success("MFA Successful! Welcome back.", {
@@ -264,7 +291,13 @@ export default function LoginPage() {
                       <KeyRound className="w-8 h-8 text-primary" />
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Enter the 6-digit code from your authenticator app
+                      Enter the 6-digit code sent to
+                    </p>
+                    <p className="text-sm font-mono text-primary mt-1">
+                      {currentUserEmail ? (() => {
+                        const [local, domain] = currentUserEmail.split('@');
+                        return local.length <= 2 ? currentUserEmail : `${local[0]}***@${domain}`;
+                      })() : ''}
                     </p>
                   </div>
 
@@ -281,6 +314,23 @@ export default function LoginPage() {
                       value={formData.otp}
                       onChange={(e) => setFormData({ ...formData, otp: e.target.value.replace(/\D/g, "") })}
                     />
+                  </div>
+
+                  {/* Remember Me / Trust Device Checkbox */}
+                  <div className="flex items-center justify-center space-x-2 py-2 bg-primary/5 rounded-lg border border-primary/10">
+                    <input
+                      type="checkbox"
+                      id="rememberMeOTP"
+                      className="w-4 h-4 rounded border-border bg-background text-primary focus:ring-primary/20 cursor-pointer"
+                      checked={formData.rememberMe}
+                      onChange={(e) => setFormData({ ...formData, rememberMe: e.target.checked })}
+                    />
+                    <label
+                      htmlFor="rememberMeOTP"
+                      className="text-sm text-primary/80 cursor-pointer select-none font-medium"
+                    >
+                      Trust this device for 30 minutes
+                    </label>
                   </div>
 
                   <Button type="submit" className="w-full font-mono" disabled={isLoading}>

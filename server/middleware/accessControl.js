@@ -40,7 +40,7 @@ const Action = {
  */
 const RBAC_MATRIX = {
     [UserRole.STUDENT]: {
-        [ResourceType.PROJECT_FILE]: [Action.CREATE, Action.READ],
+        [ResourceType.PROJECT_FILE]: [Action.CREATE, Action.READ, Action.DELETE],
         [ResourceType.FINAL_RESULT]: [Action.READ],
     },
     [UserRole.REVIEWER]: {

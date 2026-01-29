@@ -1,8 +1,11 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const { ObjectId } = require('mongodb');
 const { getDB } = require('../config/database');
 const emailService = require('../services/emailService');
+const { authenticate } = require('../middleware/accessControl');
 
 const router = express.Router();
 
@@ -78,6 +81,8 @@ router.post('/register', async (req, res) => {
             createdAt: new Date(),
             lastLogin: null,
             mfaEnabled: true,
+            encPub: null,  // RSA-OAEP public key for encryption
+            signPub: null, // RSA-PSS public key for signing
         };
 
         const result = await usersCollection.insertOne(newUser);
@@ -141,6 +146,37 @@ router.post('/login', async (req, res) => {
             });
         }
 
+        // CHECK FOR MFA TRUST TOKEN (Remember Me)
+        const { mfaToken } = req.body;
+        if (mfaToken && user.mfaTrustToken === mfaToken && user.mfaTrustExpires > new Date()) {
+            console.log(`✅ Skipping MFA for user ${user.email} (Remember Me active)`);
+
+            // Generate full access token immediately
+            const token = generateToken(user);
+
+            // Create session
+            const sessionsCollection = db.collection('sessions');
+            await sessionsCollection.insertOne({
+                userId: user._id,
+                token,
+                createdAt: new Date(),
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            });
+
+            return res.json({
+                success: true,
+                message: 'Login successful (MFA skipped)',
+                token,
+                user: {
+                    id: user._id,
+                    username: user.username,
+                    email: user.email,
+                    role: user.role,
+                },
+                requiresMFA: false
+            });
+        }
+
         // Generate OTP for MFA
         const otp = generateOTP();
         const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
@@ -168,11 +204,6 @@ router.post('/login', async (req, res) => {
             userId: user._id,
             email: user.email,
             requiresMFA: true,
-            // For demo/test purposes, include preview URL if available
-            ...(emailResult.previewUrl && { previewUrl: emailResult.previewUrl }),
-            // In production, NEVER send OTP in response
-            // But for testing without email, include it:
-            ...(process.env.NODE_ENV === 'development' && { otp })
         });
 
     } catch (error) {
@@ -249,10 +280,27 @@ router.post('/verify-otp', async (req, res) => {
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
         });
 
+        // HANDLE REMEMBER ME (Issue trust token)
+        const { rememberMe } = req.body;
+        let issuedMfaToken = null;
+        if (rememberMe) {
+            issuedMfaToken = crypto.randomBytes(32).toString('hex');
+            await usersCollection.updateOne(
+                { _id: user._id },
+                {
+                    $set: {
+                        mfaTrustToken: issuedMfaToken,
+                        mfaTrustExpires: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
+                    }
+                }
+            );
+        }
+
         res.json({
             success: true,
-            message: 'Authentication successful',
+            message: 'OTP verified successfully',
             token,
+            mfaToken: issuedMfaToken,
             user: {
                 id: user._id,
                 username: user.username,
@@ -445,6 +493,143 @@ router.post('/create-admin', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Admin creation failed',
+            message: error.message
+        });
+    }
+});
+
+/**
+ * UPDATE PUBLIC KEYS - Store user's public keys
+ * POST /api/auth/update-keys
+ */
+router.post('/update-keys', async (req, res) => {
+    try {
+        const { token, encPub, signPub } = req.body;
+
+        if (!token || !encPub || !signPub) {
+            return res.status(400).json({
+                success: false,
+                error: 'Token and public keys are required'
+            });
+        }
+
+        // Verify token
+        const decoded = jwt.verify(
+            token,
+            process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+        );
+
+        const db = getDB();
+        const usersCollection = db.collection('users');
+
+        // Update user's public keys
+        await usersCollection.updateOne(
+            { _id: new ObjectId(decoded.userId) },
+            {
+                $set: {
+                    encPub,
+                    signPub,
+                    keysUpdatedAt: new Date()
+                }
+            }
+        );
+
+        console.log('✅ Public keys updated:', {
+            userId: decoded.userId,
+            email: decoded.email
+        });
+
+        res.json({
+            success: true,
+            message: 'Public keys updated successfully'
+        });
+
+    } catch (error) {
+        console.error('Update keys error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to update keys',
+            message: error.message
+        });
+    }
+});
+
+/**
+ * GET REVIEWER PUBLIC KEYS - Get all reviewer public keys for encryption
+ * GET /api/auth/reviewer-keys
+ */
+router.get('/reviewer-keys', async (req, res) => {
+    try {
+        const db = getDB();
+        const usersCollection = db.collection('users');
+
+        // Get all reviewers with public keys
+        const reviewers = await usersCollection.find({
+            role: 'reviewer',
+            encPub: { $ne: null }
+        }).project({
+            _id: 1,
+            email: 1,
+            username: 1,
+            encPub: 1,
+            signPub: 1
+        }).toArray();
+
+        res.json({
+            success: true,
+            reviewers: reviewers.map(r => ({
+                id: r._id,
+                email: r.email,
+                username: r.username,
+                encPub: r.encPub,
+                signPub: r.signPub
+            }))
+        });
+
+    } catch (error) {
+        console.error('Get reviewer keys error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch reviewer keys',
+            message: error.message
+        });
+    }
+});
+
+/**
+ * GET ALL USERS - Admin only
+ * GET /api/auth/users
+ */
+router.get('/users', authenticate, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                error: 'Forbidden - Admin only'
+            });
+        }
+
+        const db = getDB();
+        const usersCollection = db.collection('users');
+
+        const users = await usersCollection.find({})
+            .project({
+                passwordHash: 0, // Never send hashes
+                mfaSecret: 0,
+                mfaTrustToken: 0
+            })
+            .toArray();
+
+        res.json({
+            success: true,
+            users
+        });
+
+    } catch (error) {
+        console.error('Get all users error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch users',
             message: error.message
         });
     }
