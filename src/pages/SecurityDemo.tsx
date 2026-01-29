@@ -283,9 +283,9 @@ export default function SecurityDemo() {
                                             <thead>
                                                 <tr className="border-b">
                                                     <th className="p-2 text-left font-mono text-sm">Role / Resource</th>
-                                                    <th className="p-2 text-left font-mono text-sm">Project Files</th>
-                                                    <th className="p-2 text-left font-mono text-sm">Evaluation Reports</th>
-                                                    <th className="p-2 text-left font-mono text-sm">Final Results</th>
+                                                    <th className="p-2 text-left font-mono text-sm">Academic Artifacts</th>
+                                                    <th className="p-2 text-left font-mono text-sm">Assessment Metrics</th>
+                                                    <th className="p-2 text-left font-mono text-sm">Institutional Records</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -294,12 +294,12 @@ export default function SecurityDemo() {
                                                     <td className="p-2 text-xs">
                                                         {AccessControlService.hasPermission(
                                                             UserRole.STUDENT,
-                                                            ResourceType.PROJECT_FILE,
+                                                            ResourceType.ACADEMIC_ARTIFACTS,
                                                             Action.CREATE
                                                         ) && <span className="text-green-500">CREATE </span>}
                                                         {AccessControlService.hasPermission(
                                                             UserRole.STUDENT,
-                                                            ResourceType.PROJECT_FILE,
+                                                            ResourceType.ACADEMIC_ARTIFACTS,
                                                             Action.READ
                                                         ) && <span className="text-green-500">READ</span>}
                                                     </td>
@@ -307,7 +307,7 @@ export default function SecurityDemo() {
                                                     <td className="p-2 text-xs">
                                                         {AccessControlService.hasPermission(
                                                             UserRole.STUDENT,
-                                                            ResourceType.FINAL_RESULT,
+                                                            ResourceType.INSTITUTIONAL_RECORDS,
                                                             Action.READ
                                                         ) && <span className="text-green-500">READ</span>}
                                                     </td>
@@ -317,24 +317,24 @@ export default function SecurityDemo() {
                                                     <td className="p-2 text-xs">
                                                         {AccessControlService.hasPermission(
                                                             UserRole.REVIEWER,
-                                                            ResourceType.PROJECT_FILE,
+                                                            ResourceType.ACADEMIC_ARTIFACTS,
                                                             Action.READ
                                                         ) && <span className="text-green-500">READ</span>}
                                                     </td>
                                                     <td className="p-2 text-xs">
                                                         {AccessControlService.hasPermission(
                                                             UserRole.REVIEWER,
-                                                            ResourceType.EVALUATION_REPORT,
+                                                            ResourceType.ASSESSMENT_METRICS,
                                                             Action.CREATE
                                                         ) && <span className="text-green-500">CREATE </span>}
                                                         {AccessControlService.hasPermission(
                                                             UserRole.REVIEWER,
-                                                            ResourceType.EVALUATION_REPORT,
+                                                            ResourceType.ASSESSMENT_METRICS,
                                                             Action.READ
                                                         ) && <span className="text-green-500">READ </span>}
                                                         {AccessControlService.hasPermission(
                                                             UserRole.REVIEWER,
-                                                            ResourceType.EVALUATION_REPORT,
+                                                            ResourceType.ASSESSMENT_METRICS,
                                                             Action.SIGN
                                                         ) && <span className="text-green-500">SIGN</span>}
                                                     </td>
@@ -345,46 +345,46 @@ export default function SecurityDemo() {
                                                     <td className="p-2 text-xs">
                                                         {AccessControlService.hasPermission(
                                                             UserRole.ADMIN,
-                                                            ResourceType.PROJECT_FILE,
+                                                            ResourceType.ACADEMIC_ARTIFACTS,
                                                             Action.READ
                                                         ) && <span className="text-green-500">READ </span>}
                                                         {AccessControlService.hasPermission(
                                                             UserRole.ADMIN,
-                                                            ResourceType.PROJECT_FILE,
+                                                            ResourceType.ACADEMIC_ARTIFACTS,
                                                             Action.DELETE
                                                         ) && <span className="text-green-500">DELETE</span>}
                                                     </td>
                                                     <td className="p-2 text-xs">
                                                         {AccessControlService.hasPermission(
                                                             UserRole.ADMIN,
-                                                            ResourceType.EVALUATION_REPORT,
+                                                            ResourceType.ASSESSMENT_METRICS,
                                                             Action.READ
                                                         ) && <span className="text-green-500">READ </span>}
                                                         {AccessControlService.hasPermission(
                                                             UserRole.ADMIN,
-                                                            ResourceType.EVALUATION_REPORT,
+                                                            ResourceType.ASSESSMENT_METRICS,
                                                             Action.VERIFY
                                                         ) && <span className="text-green-500">VERIFY</span>}
                                                     </td>
                                                     <td className="p-2 text-xs">
                                                         {AccessControlService.hasPermission(
                                                             UserRole.ADMIN,
-                                                            ResourceType.FINAL_RESULT,
+                                                            ResourceType.INSTITUTIONAL_RECORDS,
                                                             Action.CREATE
                                                         ) && <span className="text-green-500">CREATE </span>}
                                                         {AccessControlService.hasPermission(
                                                             UserRole.ADMIN,
-                                                            ResourceType.FINAL_RESULT,
+                                                            ResourceType.INSTITUTIONAL_RECORDS,
                                                             Action.UPDATE
                                                         ) && <span className="text-green-500">UPDATE </span>}
                                                         {AccessControlService.hasPermission(
                                                             UserRole.ADMIN,
-                                                            ResourceType.FINAL_RESULT,
+                                                            ResourceType.INSTITUTIONAL_RECORDS,
                                                             Action.READ
                                                         ) && <span className="text-green-500">READ </span>}
                                                         {AccessControlService.hasPermission(
                                                             UserRole.ADMIN,
-                                                            ResourceType.FINAL_RESULT,
+                                                            ResourceType.INSTITUTIONAL_RECORDS,
                                                             Action.DELETE
                                                         ) && <span className="text-green-500">DELETE</span>}
                                                     </td>
@@ -505,8 +505,8 @@ export default function SecurityDemo() {
                                     {verifySignResult !== null && (
                                         <div
                                             className={`flex items-center gap-2 p-2 rounded ${verifySignResult
-                                                    ? "bg-green-500/10 text-green-600"
-                                                    : "bg-red-500/10 text-red-600"
+                                                ? "bg-green-500/10 text-green-600"
+                                                : "bg-red-500/10 text-red-600"
                                                 }`}
                                         >
                                             {verifySignResult ? (

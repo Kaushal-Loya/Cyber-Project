@@ -15,9 +15,9 @@ export enum UserRole {
 }
 
 export enum ResourceType {
-    PROJECT_FILE = 'project_file',
-    EVALUATION_REPORT = 'evaluation_report',
-    FINAL_RESULT = 'final_result',
+    ACADEMIC_ARTIFACTS = 'academic_artifacts',
+    ASSESSMENT_METRICS = 'assessment_metrics',
+    INSTITUTIONAL_RECORDS = 'institutional_records',
 }
 
 export enum Action {
@@ -41,26 +41,26 @@ type AccessControlMatrix = {
  */
 export const RBAC_MATRIX: AccessControlMatrix = {
     [UserRole.STUDENT]: {
-        // Students can create and read their OWN project files only
-        [ResourceType.PROJECT_FILE]: [Action.CREATE, Action.READ],
-        // Students can read their OWN final results only
-        [ResourceType.FINAL_RESULT]: [Action.READ],
-        // Students have NO access to raw evaluation reports
+        // Students can create and read their OWN academic artifacts only
+        [ResourceType.ACADEMIC_ARTIFACTS]: [Action.CREATE, Action.READ],
+        // Students can read their OWN institutional records only
+        [ResourceType.INSTITUTIONAL_RECORDS]: [Action.READ],
+        // Students have NO access to raw assessment metrics
     },
     [UserRole.REVIEWER]: {
-        // Reviewers can read ASSIGNED project files only
-        [ResourceType.PROJECT_FILE]: [Action.READ],
-        // Reviewers can create, read, and sign their OWN evaluation reports
-        [ResourceType.EVALUATION_REPORT]: [Action.CREATE, Action.READ, Action.SIGN],
-        // Reviewers have NO access to final results (separation of duties)
+        // Reviewers can read ASSIGNED academic artifacts only
+        [ResourceType.ACADEMIC_ARTIFACTS]: [Action.READ],
+        // Reviewers can create, read, and sign their OWN assessment metrics
+        [ResourceType.ASSESSMENT_METRICS]: [Action.CREATE, Action.READ, Action.SIGN],
+        // Reviewers have NO access to institutional records (separation of duties)
     },
     [UserRole.ADMIN]: {
-        // Admins can read and delete any project file (oversight)
-        [ResourceType.PROJECT_FILE]: [Action.READ, Action.DELETE],
-        // Admins can read and verify evaluation reports (audit)
-        [ResourceType.EVALUATION_REPORT]: [Action.READ, Action.VERIFY],
-        // Admins have full control over final results
-        [ResourceType.FINAL_RESULT]: [Action.CREATE, Action.UPDATE, Action.READ, Action.DELETE],
+        // Admins can read and delete any academic artifact (oversight)
+        [ResourceType.ACADEMIC_ARTIFACTS]: [Action.READ, Action.DELETE],
+        // Admins can read and verify assessment metrics (audit)
+        [ResourceType.ASSESSMENT_METRICS]: [Action.READ, Action.VERIFY],
+        // Admins have full control over institutional records
+        [ResourceType.INSTITUTIONAL_RECORDS]: [Action.CREATE, Action.UPDATE, Action.READ, Action.DELETE],
     },
 };
 
@@ -69,19 +69,19 @@ export const RBAC_MATRIX: AccessControlMatrix = {
  */
 export const POLICY_DESCRIPTIONS = {
     [UserRole.STUDENT]: {
-        [ResourceType.PROJECT_FILE]: 'Students can create and view their own project submissions. No modification or deletion allowed to maintain academic integrity.',
-        [ResourceType.FINAL_RESULT]: 'Students can view their own final grades and evaluation outcomes.',
-        [ResourceType.EVALUATION_REPORT]: 'No access - students do not see raw evaluation reports.',
+        [ResourceType.ACADEMIC_ARTIFACTS]: 'Students can create and view their own academic artifacts. No modification or deletion allowed to maintain academic integrity.',
+        [ResourceType.INSTITUTIONAL_RECORDS]: 'Students can view their own published institutional records and evaluation outcomes.',
+        [ResourceType.ASSESSMENT_METRICS]: 'No access - students do not see raw assessment metrics.',
     },
     [UserRole.REVIEWER]: {
-        [ResourceType.PROJECT_FILE]: 'Read-only access to assigned student projects for evaluation purposes.',
-        [ResourceType.EVALUATION_REPORT]: 'Can create, read, and digitally sign evaluation reports. Once signed, reports are immutable.',
-        [ResourceType.FINAL_RESULT]: 'No access - maintains separation between evaluation and final grading.',
+        [ResourceType.ACADEMIC_ARTIFACTS]: 'Read-only access to assigned academic artifacts for evaluation purposes.',
+        [ResourceType.ASSESSMENT_METRICS]: 'Can create, read, and digitally sign local assessment metrics. Once signed, metrics are immutable.',
+        [ResourceType.INSTITUTIONAL_RECORDS]: 'No access - maintains separation between evaluation and final record publishing.',
     },
     [UserRole.ADMIN]: {
-        [ResourceType.PROJECT_FILE]: 'Full oversight with read and delete permissions for content moderation.',
-        [ResourceType.EVALUATION_REPORT]: 'Can read and verify digital signatures for audit purposes. Cannot create or modify.',
-        [ResourceType.FINAL_RESULT]: 'Complete control for grade management, appeals processing, and system administration.',
+        [ResourceType.ACADEMIC_ARTIFACTS]: 'Full oversight with read and delete permissions for academic artifact moderation.',
+        [ResourceType.ASSESSMENT_METRICS]: 'Can read and verify digital signatures for assessment metrics. Cannot create or modify.',
+        [ResourceType.INSTITUTIONAL_RECORDS]: 'Complete control for institutional record management, appeals processing, and system administration.',
     },
 };
 
@@ -131,11 +131,11 @@ export class AccessControlService {
 
         // Step 2: Ownership checks for STUDENT role
         if (context.role === UserRole.STUDENT) {
-            if (resource === ResourceType.PROJECT_FILE || resource === ResourceType.FINAL_RESULT) {
+            if (resource === ResourceType.ACADEMIC_ARTIFACTS || resource === ResourceType.INSTITUTIONAL_RECORDS) {
                 if (context.resourceOwnerId && context.resourceOwnerId !== context.userId) {
                     return {
                         allowed: false,
-                        reason: 'Students can only access their own resources',
+                        reason: 'Students can only access their own artifacts and records',
                         policy: 'Ownership enforcement - prevents viewing other students\' work',
                     };
                 }
@@ -144,11 +144,11 @@ export class AccessControlService {
 
         // Step 3: Assignment checks for REVIEWER role
         if (context.role === UserRole.REVIEWER) {
-            if (resource === ResourceType.PROJECT_FILE && action === Action.READ) {
+            if (resource === ResourceType.ACADEMIC_ARTIFACTS && action === Action.READ) {
                 if (context.assignedReviewerId && context.assignedReviewerId !== context.userId) {
                     return {
                         allowed: false,
-                        reason: 'Reviewers can only access assigned project files',
+                        reason: 'Reviewers can only access assigned academic artifacts',
                         policy: 'Assignment-based access control',
                     };
                 }
