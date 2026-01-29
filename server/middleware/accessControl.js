@@ -18,9 +18,9 @@ const UserRole = {
  * Resource Types
  */
 const ResourceType = {
-    PROJECT_FILE: 'project_file',
-    EVALUATION_REPORT: 'evaluation_report',
-    FINAL_RESULT: 'final_result',
+    ACADEMIC_ARTIFACTS: 'academic_artifacts',
+    ASSESSMENT_METRICS: 'assessment_metrics',
+    INSTITUTIONAL_RECORDS: 'institutional_records',
 };
 
 /**
@@ -40,17 +40,17 @@ const Action = {
  */
 const RBAC_MATRIX = {
     [UserRole.STUDENT]: {
-        [ResourceType.PROJECT_FILE]: [Action.CREATE, Action.READ, Action.DELETE],
-        [ResourceType.FINAL_RESULT]: [Action.READ],
+        [ResourceType.ACADEMIC_ARTIFACTS]: [Action.CREATE, Action.READ, Action.DELETE],
+        [ResourceType.INSTITUTIONAL_RECORDS]: [Action.READ],
     },
     [UserRole.REVIEWER]: {
-        [ResourceType.PROJECT_FILE]: [Action.READ],
-        [ResourceType.EVALUATION_REPORT]: [Action.CREATE, Action.READ, Action.SIGN],
+        [ResourceType.ACADEMIC_ARTIFACTS]: [Action.READ],
+        [ResourceType.ASSESSMENT_METRICS]: [Action.CREATE, Action.READ, Action.SIGN],
     },
     [UserRole.ADMIN]: {
-        [ResourceType.PROJECT_FILE]: [Action.READ, Action.DELETE],
-        [ResourceType.EVALUATION_REPORT]: [Action.READ, Action.VERIFY],
-        [ResourceType.FINAL_RESULT]: [Action.CREATE, Action.UPDATE, Action.READ, Action.DELETE],
+        [ResourceType.ACADEMIC_ARTIFACTS]: [Action.READ, Action.DELETE],
+        [ResourceType.ASSESSMENT_METRICS]: [Action.READ, Action.VERIFY],
+        [ResourceType.INSTITUTIONAL_RECORDS]: [Action.CREATE, Action.UPDATE, Action.READ, Action.DELETE],
     },
 };
 

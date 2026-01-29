@@ -9,7 +9,7 @@ const router = express.Router();
  * SUBMIT PROJECT - Student uploads encrypted project
  * POST /api/projects/submit
  */
-router.post('/submit', authenticate, checkPermission(ResourceType.PROJECT_FILE, Action.CREATE), async (req, res) => {
+router.post('/submit', authenticate, checkPermission(ResourceType.ACADEMIC_ARTIFACTS, Action.CREATE), async (req, res) => {
     try {
         const {
             title,
@@ -141,7 +141,7 @@ router.get('/my-projects', authenticate, async (req, res) => {
  * GET ASSIGNED PROJECTS - Reviewer retrieves assigned projects
  * GET /api/projects/assigned
  */
-router.get('/assigned', authenticate, checkPermission(ResourceType.PROJECT_FILE, Action.READ), async (req, res) => {
+router.get('/assigned', authenticate, checkPermission(ResourceType.ACADEMIC_ARTIFACTS, Action.READ), async (req, res) => {
     try {
         const db = getDB();
         const projectsCollection = db.collection('projects');
@@ -185,7 +185,7 @@ router.get('/assigned', authenticate, checkPermission(ResourceType.PROJECT_FILE,
  * EVALUATE PROJECT - Reviewer submits evaluation
  * POST /api/projects/evaluate
  */
-router.post('/evaluate', authenticate, checkPermission(ResourceType.EVALUATION_REPORT, Action.CREATE), async (req, res) => {
+router.post('/evaluate', authenticate, checkPermission(ResourceType.ASSESSMENT_METRICS, Action.CREATE), async (req, res) => {
     try {
         const {
             submissionId,
@@ -267,16 +267,8 @@ router.post('/evaluate', authenticate, checkPermission(ResourceType.EVALUATION_R
  * GET ALL PROJECTS - Admin retrieves all projects
  * GET /api/projects/all
  */
-router.get('/all', authenticate, async (req, res) => {
+router.get('/all', authenticate, checkPermission(ResourceType.ACADEMIC_ARTIFACTS, Action.READ), async (req, res) => {
     try {
-        // Only admins can see all projects
-        if (req.user.role !== 'admin') {
-            return res.status(403).json({
-                success: false,
-                error: 'Forbidden - Admin only'
-            });
-        }
-
         const db = getDB();
         const projectsCollection = db.collection('projects');
 
@@ -320,12 +312,8 @@ router.get('/all', authenticate, async (req, res) => {
  * GET PENDING EVALUATIONS - Admin retrieves all evaluated projects for verification
  * GET /api/projects/pending-evaluations
  */
-router.get('/pending-evaluations', authenticate, async (req, res) => {
+router.get('/pending-evaluations', authenticate, checkPermission(ResourceType.ASSESSMENT_METRICS, Action.READ), async (req, res) => {
     try {
-        if (req.user.role !== 'admin') {
-            return res.status(403).json({ success: false, error: 'Admin only' });
-        }
-
         const db = getDB();
         const projectsCollection = db.collection('projects');
         const evaluationsCollection = db.collection('evaluations');
@@ -374,12 +362,8 @@ router.get('/pending-evaluations', authenticate, async (req, res) => {
  * VERIFY AND PUBLISH - Admin verifies signature and publishes result
  * POST /api/projects/verify-publish
  */
-router.post('/verify-publish', authenticate, async (req, res) => {
+router.post('/verify-publish', authenticate, checkPermission(ResourceType.INSTITUTIONAL_RECORDS, Action.CREATE), async (req, res) => {
     try {
-        if (req.user.role !== 'admin') {
-            return res.status(403).json({ success: false, error: 'Admin only' });
-        }
-
         const { projectId } = req.body;
         if (!projectId) return res.status(400).json({ success: false, error: 'Project ID required' });
 
@@ -408,7 +392,7 @@ router.post('/verify-publish', authenticate, async (req, res) => {
  * DELETE PROJECT - Student or Admin deletes project
  * DELETE /api/projects/:id
  */
-router.delete('/:id', authenticate, async (req, res) => {
+router.delete('/:id', authenticate, checkPermission(ResourceType.ACADEMIC_ARTIFACTS, Action.DELETE), async (req, res) => {
     try {
         const { id } = req.params;
 

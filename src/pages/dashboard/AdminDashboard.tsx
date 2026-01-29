@@ -251,10 +251,10 @@ export default function AdminDashboard() {
             <div className="p-4 border-t border-sidebar-border">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-mono font-bold">
-                  {user?.email?.charAt(0).toUpperCase() || 'A'}
+                  {(user?.username || user?.email || 'A').charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-mono text-sm font-medium truncate">{user?.email || 'Admin'}</p>
+                  <p className="font-mono text-sm font-medium truncate">{user?.username || user?.email || 'Admin'}</p>
                   <RoleBadge role="admin" size="sm" />
                 </div>
               </div>

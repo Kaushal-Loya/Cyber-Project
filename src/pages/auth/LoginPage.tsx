@@ -34,7 +34,6 @@ export default function LoginPage() {
     username: "",
     password: "",
     otp: "",
-    rememberMe: false,
   });
 
   const handleCredentialSubmit = async (e: React.FormEvent) => {
@@ -47,10 +46,7 @@ export default function LoginPage() {
 
     try {
       // STEP 1: Single-Factor Authentication
-      // Send stored mfaToken if available (using email-aware trust)
-      const tokens = JSON.parse(localStorage.getItem('mfa_trust_tokens') || '{}');
-      const storedMfaToken = tokens[formData.username.toLowerCase()] || tokens[formData.username];
-      const result = await ApiService.login(formData.username, formData.password, storedMfaToken);
+      const result = await ApiService.login(formData.username, formData.password);
 
       if (!result.success) {
         toast.error(result.error || "Authentication failed");
@@ -58,28 +54,7 @@ export default function LoginPage() {
         return;
       }
 
-      // If MFA was skipped (result contains token + user)
-      if (result.token && !result.requiresMFA) {
-        localStorage.setItem('token', result.token);
 
-        // Authenticate context
-        let userRole = UserRole.STUDENT;
-        if (result.user.role === 'reviewer') userRole = UserRole.REVIEWER;
-        else if (result.user.role === 'admin') userRole = UserRole.ADMIN;
-
-        await mockLogin(result.user.email, userRole, result.user.username);
-
-        setIsLoading(false);
-        toast.success("Welcome back! MFA skipped (Trusted Device)", {
-          description: `Logged in as ${result.user.username}`,
-        });
-
-        // Navigate based on role
-        if (userRole === UserRole.ADMIN) navigate("/dashboard/admin");
-        else if (userRole === UserRole.REVIEWER) navigate("/dashboard/reviewer");
-        else navigate("/dashboard/student");
-        return;
-      }
 
       // Normal flow: STEP 2 OTP sent
       setCurrentUserEmail(result.email);
@@ -115,7 +90,7 @@ export default function LoginPage() {
 
     try {
       // STEP 3: Multi-Factor Authentication - Verify OTP from MongoDB
-      const result = await ApiService.verifyOTP(currentUserEmail, formData.otp, formData.rememberMe);
+      const result = await ApiService.verifyOTP(currentUserEmail, formData.otp, false);
 
       if (!result.success) {
         toast.error(result.error || "OTP verification failed");
@@ -134,12 +109,7 @@ export default function LoginPage() {
       // Authenticate via SecurityContext
       await mockLogin(result.user.email, userRole, result.user.username);
 
-      // Handle MFA Trust Token (Remember Me)
-      if (result.mfaToken) {
-        const tokens = JSON.parse(localStorage.getItem('mfa_trust_tokens') || '{}');
-        tokens[result.user.email.toLowerCase()] = result.mfaToken;
-        localStorage.setItem('mfa_trust_tokens', JSON.stringify(tokens));
-      }
+
 
       setIsLoading(false);
       toast.success("MFA Successful! Welcome back.", {
@@ -314,23 +284,6 @@ export default function LoginPage() {
                       value={formData.otp}
                       onChange={(e) => setFormData({ ...formData, otp: e.target.value.replace(/\D/g, "") })}
                     />
-                  </div>
-
-                  {/* Remember Me / Trust Device Checkbox */}
-                  <div className="flex items-center justify-center space-x-2 py-2 bg-primary/5 rounded-lg border border-primary/10">
-                    <input
-                      type="checkbox"
-                      id="rememberMeOTP"
-                      className="w-4 h-4 rounded border-border bg-background text-primary focus:ring-primary/20 cursor-pointer"
-                      checked={formData.rememberMe}
-                      onChange={(e) => setFormData({ ...formData, rememberMe: e.target.checked })}
-                    />
-                    <label
-                      htmlFor="rememberMeOTP"
-                      className="text-sm text-primary/80 cursor-pointer select-none font-medium"
-                    >
-                      Trust this device for 30 minutes
-                    </label>
                   </div>
 
                   <Button type="submit" className="w-full font-mono" disabled={isLoading}>
