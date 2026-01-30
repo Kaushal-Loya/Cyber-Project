@@ -51,7 +51,7 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, []);
 
     const loadKeys = async (userId: string) => {
-        // Try to load keys from LocalStorage (Simulate "Secure Key Store")
+        // Try to load keys from LocalStorage
         const encPriv = localStorage.getItem(`enc_priv_${userId}`);
         const encPub = localStorage.getItem(`enc_pub_${userId}`);
         const signPriv = localStorage.getItem(`sign_priv_${userId}`);
@@ -70,7 +70,6 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setSigningKeys(signKeyPair);
 
             // Sync public keys to MongoDB (in case they were only local before)
-            // This is idempotent and ensures the backend has the keys
             const token = localStorage.getItem('token');
             if (token) {
                 try {

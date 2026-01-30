@@ -293,7 +293,6 @@ class EmailService {
               </div>
               
               <div class="content">
-                <div class="greeting">$ auth.verify(user: "${username}")</div>
                 
                 <p class="message">
                   Authentication request detected. To complete your secure login to SecureEval, 
