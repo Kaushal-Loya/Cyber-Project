@@ -121,10 +121,6 @@ export default function LandingPage() {
             transition={{ duration: 0.6 }}
             className="text-center max-w-4xl mx-auto"
           >
-            <div className="flex justify-center gap-2 mb-6">
-              <SecurityBadge variant="encrypted">End-to-End Encrypted</SecurityBadge>
-              <SecurityBadge variant="verified">NIST Compliant</SecurityBadge>
-            </div>
 
             <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
               Secure Academic

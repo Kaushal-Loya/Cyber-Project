@@ -118,7 +118,8 @@ router.get('/my-projects', authenticate, async (req, res) => {
                 feedback: evalData?.feedback || null,
                 evaluationDate: evalData?.timestamp || null,
                 verified: p.verified || false,
-                reviewer: reviewerInfo
+                reviewer: reviewerInfo,
+                originalName: p.originalName || 'file.bin'
             };
         }));
 
@@ -289,7 +290,8 @@ router.get('/all', authenticate, checkPermission(ResourceType.ACADEMIC_ARTIFACTS
                 fileHash: p.fileHash,
                 reviewerId: p.reviewerId,
                 verified: p.verified || false,
-                grade: evalData?.grading || null
+                grade: evalData?.grading || null,
+                originalName: p.originalName || 'file.bin'
             };
         }));
 
